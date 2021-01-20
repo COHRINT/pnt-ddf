@@ -1,0 +1,10 @@
+# Required python packages
+# Use pip rather than using apt if running in docker; versions in apt repos are very old
+
+numpy
+scipy
+sympy
+pandas
+simpy
+progressbar2
+matplotlib
