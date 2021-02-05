@@ -1,0 +1,65 @@
+<launch>
+  <!-- Gazebo -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find pntddf_ros)/worlds/demo.world"/>
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui" value="true"/>
+    <arg name="recording" value="false"/>
+    <arg name="debug" value="false"/>
+  </include>
+
+  <!-- Spawn Jackals -->
+  <arg name="rviz"       default="false"/>
+  <arg name="ns0"        default="jackal_0"/>
+  <arg name="ns1"        default="jackal_1"/>
+  <arg name="ns2"        default="jackal_2"/>
+  <arg name="config0"    default="base"/>
+  <arg name="config0_id" default="0"/>
+  <arg name="config1"    default="base"/>
+  <arg name="config1_id" default="1"/>
+  <arg name="config2"    default="base"/>
+  <arg name="config2_id" default="2"/>
+  
+  <include file="$(find multi_jackal_base)/launch/jackal_base.launch">
+    <arg name="ns"            value="$(arg ns0)"/>
+    <arg name="config"        value="$(arg config0)"/>
+    <arg name="config_id"     value="$(arg config0_id)"/>
+    <arg name="use_move_base" value="true"/>
+    <arg name="use_global_ekf" default="false"/>
+    <arg name="use_global_tf"  default="true"/>
+    <arg name="x"             value="0"/>
+    <arg name="y"             value="0"/>
+  </include>
+  
+  <!-- <include file="$(find multi_jackal_base)/launch/jackal_base.launch"> -->
+  <!--   <arg name="ns"            value="$(arg ns1)"/> -->
+  <!--   <arg name="config"        value="$(arg config1)"/> -->
+  <!--   <arg name="config_id"     value="$(arg config1_id)"/> -->
+  <!--   <arg name="use_move_base" value="true"/> -->
+  <!--   <arg name="use_global_ekf" default="false"/> -->
+  <!--   <arg name="use_global_tf"  default="true"/> -->
+  <!--   <arg name="x"             value="3"/> -->
+  <!--   <arg name="y"             value="0"/> -->
+  <!-- </include> -->
+
+  <!-- <include file="$(find multi_jackal_base)/launch/jackal_base.launch"> -->
+  <!--   <arg name="ns"            value="$(arg ns2)"/> -->
+  <!--   <arg name="config"        value="$(arg config2)"/> -->
+  <!--   <arg name="config_id"     value="$(arg config2_id)"/> -->
+  <!--   <arg name="use_move_base" value="true"/> -->
+  <!--   <arg name="use_global_ekf" default="false"/> -->
+  <!--   <arg name="use_global_tf"  default="true"/> -->
+  <!--   <arg name="x"             value="2"/> -->
+  <!--   <arg name="y"             value="3"/> -->
+  <!-- </include> -->
+
+  <node pkg="tf" type="static_transform_publisher" name="world_transform"
+        args="0 0 0 0 0 0 world map 100"/>
+
+
+  <!-- Launch PNT-DDF instances -->
+  <include file="$(find pntddf_ros)/launch/agent.launch"> 
+    <arg name="agent_name" value="A"/>
+  </include>
+</launch>

@@ -7,13 +7,27 @@ import simpy
 from bpdb import set_trace
 from scipy.constants import c
 
-from agent import Agent
-from centralized import Agent_Centralized
-from dynamics import Dynamics
+from pntddf.agent import Agent
+from pntddf.centralized import Agent_Centralized
+from pntddf.dynamics import Dynamics
 
 
-def setup_env(config_file):
-    env = simpy.Environment()
+class Environment:
+    def __init__(self):
+        pass
+
+    @property
+    def now(self):
+        return rospy.Time.now()
+
+
+def setup_env(config_file, ros=False):
+    if not ros:
+        env = simpy.Environment()
+    else:
+        env = Environment()
+
+    env.ros = ros
     env.c = c
 
     # Config
@@ -130,9 +144,14 @@ def setup_env(config_file):
     assert len(env.x0) == env.NUM_STATES
 
     # Create agents
-    env.agents = [Agent(env, name) for name in env.AGENT_NAMES]
+    if not env.ros:
+        env.agents = [Agent(env, name) for name in env.AGENT_NAMES]
 
-    env.agent_dict = {name: agent for name, agent in zip(env.AGENT_NAMES, env.agents)}
+        env.agent_dict = {
+            name: agent for name, agent in zip(env.AGENT_NAMES, env.agents)
+        }
+    else:
+        pass
 
     # Centralized
     env.centralized = config.getboolean("ENV", "centralized")

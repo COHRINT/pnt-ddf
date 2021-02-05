@@ -6,11 +6,11 @@ import pandas as pd
 from bpdb import set_trace
 from scipy.linalg import block_diag
 
-from camera import Camera
-from gps import GPS
-from magnetometer import Magnetometer
-from odometer import Odometer
-from ranging_module import Ranging_Module
+from pntddf.camera import Camera
+from pntddf.gps import GPS
+from pntddf.magnetometer import Magnetometer
+from pntddf.odometer import Odometer
+from pntddf.ranging_module import Ranging_Module
 
 
 class Sensors:

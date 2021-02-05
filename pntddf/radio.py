@@ -19,7 +19,6 @@ class Radio:
 
         # Amount of time to wait before transmitting
         if "wait" in self.agent.config.keys():
-            set_trace()
             self.wait = self.agent.config.getfloat("wait")
         else:
             self.wait = 0.0

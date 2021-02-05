@@ -11,6 +11,8 @@ class Rover:
     def __init__(self, env, agent):
         self.env = env
         self.agent = agent
+        self.agent_name = agent.name
+        self.agent_config = self.env.agent_configs[agent.name]
 
         self.setup_x()
         self.setup_waypoints()
@@ -21,10 +23,9 @@ class Rover:
         self.t_previous = 0
 
     def setup_x(self):
-        if self.agent.config.getboolean("random_initial_state"):
+        if self.agent_config.getboolean("random_initial_state"):
             self.x = []
             for state in self.env.ROVER_STATES:
-                set_trace()
                 mean = self.env.x0_config.getfloat("{}_hat".format(state))
                 sigma = self.env.P0_config.getfloat("sigma_{}".format(state))
                 value = np.random.normal(mean, sigma)
@@ -34,11 +35,11 @@ class Rover:
             self.x = np.array(self.x)
         else:
             self.x = np.array(
-                [self.agent.config.getfloat(v + "_0") for v in self.env.ROVER_STATES]
+                [self.agent_config.getfloat(v + "_0") for v in self.env.ROVER_STATES]
             )
 
     def setup_waypoints(self):
-        waypoints_str = self.agent.config.get("waypoints")
+        waypoints_str = self.agent_config.get("waypoints")
 
         waypoints = list(
             map(
@@ -62,7 +63,7 @@ class Rover:
         self.x_vec = []
 
         for state_name in self.env.ROVER_STATES:
-            state_name += "_{}".format(self.agent.name)
+            state_name += "_{}".format(self.agent_name)
             state_name_sym = symbols(state_name, real=True)
             setattr(self, state_name + "_sym", state_name_sym)
 

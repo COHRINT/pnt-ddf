@@ -7,7 +7,7 @@ from numpy.linalg import cholesky, cond, det, inv
 from scipy.optimize import LinearConstraint, minimize, minimize_scalar
 from scipy.spatial.distance import mahalanobis
 
-from information import Information, invert
+from pntddf.information import Information, invert
 
 warnings.filterwarnings("ignore", category=UserWarning)
 

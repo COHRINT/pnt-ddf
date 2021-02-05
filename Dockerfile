@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y \
 
 # ROS Workspace
 ENV ROS_WS /opt/ros_ws
+ENV ROS_PYTHON_VERSION 3
 
 WORKDIR $ROS_WS
 
@@ -39,21 +40,27 @@ COPY gazebo_models/ground_plane/ /root/.gazebo/models/ground_plane
 RUN mkdir -p /root/.gazebo/models/sun
 COPY gazebo_models/sun/ /root/.gazebo/models/sun
 
-# Anything after this point will be rerun
-ARG CACHEBUST=1
-
 # PNT-DDF Setup
 ENV PNTDDF_WS /opt/pnt_ddf_ws
 RUN mkdir -p $PNTDDF_WS
 WORKDIR $PNTDDF_WS
 
-COPY pntddf/ $PNTDDF_WS/pntddf
-COPY pntddf_ros/ $PNTDDF_WS/pntddf_ros
-COPY config/ $PNTDDF_WS/config
 COPY requirements.txt $PNTDDF_WS
 COPY setup.py $PNTDDF_WS
+COPY config/ $PNTDDF_WS/config
+# COPY pntddf/ $PNTDDF_WS/pntddf
 
+# RUN pip3 install -e . -r requirements.txt
+
+# Anything after this point will be rerun
+ARG CACHEBUST=1
+
+# Copy over pntddf code
+COPY pntddf/ $PNTDDF_WS/pntddf
 RUN pip3 install -e . -r requirements.txt
+
+# Move over ROS stuff
+COPY pntddf_ros/ $PNTDDF_WS/pntddf_ros
 
 RUN ln -s $PNTDDF_WS/pntddf_ros/ $ROS_WS/src
 

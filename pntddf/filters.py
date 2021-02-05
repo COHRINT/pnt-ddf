@@ -6,9 +6,9 @@ from numpy import sqrt
 from numpy.linalg import cholesky, inv, norm
 from scipy.linalg import block_diag
 
-from covariance_intersection import covariance_intersection
-from information import Information, invert
-from state_log import State_Log
+from pntddf.covariance_intersection import covariance_intersection
+from pntddf.information import Information, invert
+from pntddf.state_log import State_Log
 
 np.set_printoptions(suppress=True)
 

@@ -2,8 +2,8 @@ from copy import copy
 
 from bpdb import set_trace
 
-from filters import Unscented_Information_Filter
-from information import invert
+from pntddf.filters import Unscented_Information_Filter
+from pntddf.information import invert
 
 
 class Estimator:

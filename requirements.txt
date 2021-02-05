@@ -5,6 +5,7 @@ numpy
 scipy
 sympy
 pandas
+rospkg
 simpy
 progressbar2
 matplotlib
