@@ -1,3 +1,5 @@
+from copy import copy
+
 import numpy as np
 from bpdb import set_trace
 from numpy.linalg import inv
@@ -24,6 +26,8 @@ class Information:
 
         self.y = y
         self.Y = Y
+
+        self.time = np.nan
 
     @property
     def Y(self):
@@ -58,6 +62,7 @@ class Information:
 
     def __copy__(self):
         new = type(self)(self.y.copy(), self.Y.copy())
+        new.time = copy(self.time)
 
         return new
 

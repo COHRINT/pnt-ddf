@@ -135,6 +135,9 @@ class Ranging_Module:
     def generate_R(self, x_hat, message_queue):
         R_values = []
 
+        if self.env.now > 10:
+            set_trace()
+
         for msg in message_queue:
             R_read = self.R[msg.receiver.name + msg.transmitter.name]
 

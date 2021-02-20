@@ -6,7 +6,7 @@ from bpdb import set_trace
 
 from pntddf.clock import Clock
 from pntddf.estimator import Estimator
-from pntddf.filters import Unscented_Information_Filter
+from pntddf.filters import Unscented_Kalman_Filter
 from pntddf.information import invert
 from pntddf.sensors import Sensors
 

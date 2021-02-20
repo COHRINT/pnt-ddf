@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import rospy
 from pntddf.agent import Agent
@@ -7,11 +7,11 @@ from pntddf.env import setup_env
 
 class Agent_Wrapper:
     def __init__(self):
-        self.agent_name = rospy.get_param("agent_name")
+        self.agent_name = rospy.get_param("/agent_name")
 
         rospy.init_node("agent_" + self.agent_name, log_level=rospy.INFO)
 
-        config_file = "../config/sim.config"
+        config_file = "/opt/pnt_ddf_ws/config/sim.config"
 
         env = setup_env(config_file, ros=True)
 

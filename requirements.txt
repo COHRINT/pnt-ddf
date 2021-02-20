@@ -1,11 +1,15 @@
 # Required python packages
 # Use pip rather than using apt if running in docker; versions in apt repos are very old
 
-numpy
-scipy
-sympy
-pandas
-rospkg
-simpy
-progressbar2
-matplotlib
+# I don't want to have to re-install these every time so I'll create individual
+# pip installs near the beginning of the dockerfile. I'll leave this empty so it still
+# installs pntddf though
+
+# numpy
+# scipy
+# sympy
+# pandas
+# rospkg
+# simpy
+# progressbar2
+# matplotlib

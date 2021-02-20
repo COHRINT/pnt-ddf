@@ -12,6 +12,12 @@ class Clock:
 
         self.time_previous = 0
 
+        self.define_parameters()
+        self.define_noise()
+
+        self.derivation()
+
+    def define_parameters(self):
         if self.agent.config.getboolean("perfect_clock"):
             self.alpha = 1.0
         else:
@@ -29,16 +35,13 @@ class Clock:
 
         self.q = np.array([self.beta, self.alpha])
 
+    def define_noise(self):
         if self.agent.config.getboolean("perfect_clock"):
             self.sigma_clock_process = 0
         else:
             self.sigma_clock_process = self.agent.config.getfloat("sigma_clock_process")
 
         self.sigma_clock_reading = self.agent.config.getfloat("sigma_clock_reading")
-        # self.sigma_clock_process = 0
-        # self.sigma_clock_reading = 0
-
-        self.derivation()
 
     def update_time(self):
         # T is time delta since last clock check

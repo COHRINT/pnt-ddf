@@ -32,8 +32,8 @@
 
 ## Roadmap
 - Goal is to incrementally build up ROS version
-- [ ] agent_wrapper create env
-- [ ] Create agent
-- [ ] Run clock from agent
+- [X] agent_wrapper create env
+- [X] Create agent
+- [X] Run clock from agent
 - [ ] Create new radio.py and transmission function. Publish time to ensure things are working
 - [ ] Ensure messages can be received by other agents

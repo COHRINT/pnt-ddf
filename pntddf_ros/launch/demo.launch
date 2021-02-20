@@ -57,9 +57,12 @@
   <node pkg="tf" type="static_transform_publisher" name="world_transform"
         args="0 0 0 0 0 0 world map 100"/>
 
-
   <!-- Launch PNT-DDF instances -->
   <include file="$(find pntddf_ros)/launch/agent.launch"> 
-    <arg name="agent_name" value="A"/>
+      <arg name="agent_name" value="A"/>
+  </include>
+
+    <include file="$(find pntddf_ros)/launch/agent.launch"> 
+      <arg name="agent_name" value="T"/>
   </include>
 </launch>

@@ -1,17 +1,18 @@
-from copy import copy
+from copy import copy, deepcopy
 
 import numpy as np
 import simpy
 from bpdb import set_trace
+from scipy.constants import c
 from scipy.spatial.distance import euclidean as distance
+
+from measurements import Pseudorange
 
 
 class Radio:
     def __init__(self, env, agent):
         self.env = env
         self.agent = agent
-
-        self.message_index = 0
 
         self.receive_log = {agent: [] for agent in self.env.AGENT_NAMES}
 
@@ -23,7 +24,22 @@ class Radio:
         else:
             self.wait = 0.0
 
-        self.beacon_process = self.env.process(self.beacon())
+        if not self.env.ros:
+            self.beacon_process = self.env.process(self.beacon())
+        else:
+            self.beacon_ros()
+
+    def beacon_ros(self):
+        # TODO: Use get_transmit_wait and then call rospy.sleep()
+
+        while not rospy.is_shutdown():
+            try:
+                wait_time, cycle_number = self.agent.clock.get_transmit_wait()
+                yield self.env.timeout(wait_time)
+            except simpy.Interrupt:
+                continue
+
+            self.prepare_message()
 
     def beacon(self):
         # Initial wait before transmitting
@@ -50,14 +66,27 @@ class Radio:
 
     def prepare_message(self):
         self.message = Message()
+        pseudorange = Pseudorange(self.env)
+        self.message.pseudorange = pseudorange
+
+        # Transmitter
         self.message.transmitter = self.agent
-        self.message.time_transmit = self.agent.clock.time()
+        pseudorange.transmitter = self.agent
 
-        self.message.index = self.message_index
+        # Transmit time
+        time_transmit = self.agent.clock.time()
+        self.message.time_transmit = time_transmit
+        pseudorange.time_transmit = time_transmit
 
-        self.message.local_info = self.agent.estimator.get_local_info()
+        self.agent.estimator.run_filter()
 
-        self.message_index += 1
+        # Measurements
+        self.message.measurements = (
+            self.agent.estimator.get_event_triggering_measurements()
+        )
+
+        # Local Info
+        # self.message.local_info = self.agent.estimator.get_local_info()
 
     def transmit_message(self):
         agent_recipients = [
@@ -69,20 +98,25 @@ class Radio:
         for recipient in agent_recipients:
             message = copy(self.message)
             message.receiver = recipient
+            message.pseudorange.receiver = recipient
 
             Transmission(self.env, message)
 
     def receive(self, message):
         self.beacon_process.interrupt()
 
-        message.time_receive = self.agent.clock.time()
+        time_receive = self.agent.clock.time()
+        message.time_receive = time_receive
+        message.pseudorange.time_receive = time_receive
 
         self.receive_log[message.transmitter.name].append(
             (self.agent.clock.magic_time(), message.time_receive)
         )
 
-        # Pass the message to clock_estimator
-        self.agent.estimator.new_message(message)
+        # Pass the measurements to estimator
+        self.agent.estimator.new_measurement(message.pseudorange)
+        for measurement in message.measurements:
+            self.agent.estimator.new_measurement(measurement)
 
 
 class Transmission:
@@ -116,24 +150,20 @@ class Transmission:
 class Message:
     def __init__(self):
         self.transmitter = None
-        self.time_transmit = None
-
         self.receiver = None
-        self.time_receive = None
 
         self.local_info = None
+        self.messages = None
 
-        self.propagated = False
-
-        self.index = 0
-
-    def __repr__(self):
-        return str(self.__dict__)
+        self.pseudorange = None
 
     def __copy__(self):
         new = type(self)()
 
         new.__dict__.update(self.__dict__)
+        new.messages = deepcopy(self.messages)
+        new.pseudorange = copy(self.pseudorange)
+
         new.local_info = copy(self.local_info)
 
         return new

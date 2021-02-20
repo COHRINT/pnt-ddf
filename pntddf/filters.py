@@ -17,12 +17,21 @@ def unit(x):
     return x / np.linalg.norm(x)
 
 
-class Unscented_Information_Filter:
+class LSQ_Filter:
     def __init__(self, env, agent):
         self.env = env
         self.agent = agent
 
-        self.sensors = agent.sensors
+    def estimate(self, message_queue):
+        set_trace()
+
+
+class Unscented_Kalman_Filter:
+    def __init__(self, env, agent):
+        self.env = env
+        self.agent = agent
+
+        # self.sensors = agent.sensors
 
         self.t_k = 0
         self.t_kp1 = 0
@@ -31,14 +40,16 @@ class Unscented_Information_Filter:
 
         self.state_log = State_Log(env, agent)
 
-        self.define_initial_information()
+        self.define_initial_state()
+        self.define_event_triggering_measurements()
         self.define_constants()
 
-    def define_initial_information(self):
-        self.Y_k_k = inv(self.env.P0)
-        self.y_k_k = self.Y_k_k @ self.env.x0
+    def define_initial_state(self):
+        self.x = self.env.x0.copy()
+        self.P = self.env.P0.copy()
 
-        self.local_info = Information(copy(self.y_k_k), copy(self.Y_k_k))
+    def define_event_triggering_measurements(self):
+        self.event_triggering_messages = []
 
     def define_constants(self):
         self.Q_sigma_clock = self.env.filter_config.getfloat("Q_sigma_clock")
@@ -60,7 +71,8 @@ class Unscented_Information_Filter:
         self.lamb = lamb
 
     def predict_self(self):
-        x_hat, P = invert(self.y_k_k, self.Y_k_k)
+        x_hat = self.x.copy()
+        P = self.P.copy()
 
         tau = self.get_tau()
 
@@ -73,40 +85,42 @@ class Unscented_Information_Filter:
 
         P_prediction += Q
 
-        self.Y_k_k = inv(P_prediction)
-        self.y_k_k = self.Y_k_k @ x_prediction
+        self.x = x_prediction
+        self.P = P_prediction
 
-    def predict_message(self, message):
-        if message.propagated:
-            return
+    # def predict_message(self, message):
+    #     assert not np.isnan(message.local_info.time)
+    #     assert message.local_info.time <= self.t_kp1
+    #     if message.local_info.time == self.t_kp1:
+    #         return
 
-        x_hat, P = invert(message.local_info.y, message.local_info.Y)
+    #     x_hat, P = invert(message.local_info.y, message.local_info.Y)
 
-        distance_estimate = self.env.dynamics.distance_between_agents(
-            message.receiver.name, message.transmitter.name, x_hat
-        )
+    #     distance_estimate = self.env.dynamics.distance_between_agents(
+    #         message.receiver.name, message.transmitter.name, x_hat
+    #     )
 
-        # Delay during transit
-        tau_distance = distance_estimate / self.env.c
+    #     # Delay during transit
+    #     tau_distance = distance_estimate / self.env.c
 
-        # Delay since received
-        tau_process = self.t_kp1 - message.time_receive
+    #     # Delay since received
+    #     tau_process = self.t_kp1 - message.time_receive
 
-        tau = tau_distance + tau_process
+    #     tau = tau_distance + tau_process
 
-        t_estimate = self.get_time_estimate(x_hat)
+    #     t_estimate = self.get_time_estimate(x_hat)
 
-        x_prediction = self.env.dynamics.step_x(x_hat, tau, t_estimate)
-        P_prediction = self.env.dynamics.step_P(P, tau)
+    #     x_prediction = self.env.dynamics.step_x(x_hat, tau, t_estimate)
+    #     P_prediction = self.env.dynamics.step_P(P, tau)
 
-        Q = self.generate_Q(time_delta=tau)
+    #     Q = self.generate_Q(time_delta=tau)
 
-        P_prediction += Q
+    #     P_prediction += Q
 
-        message.local_info.Y = inv(P_prediction)
-        message.local_info.y = message.local_info.Y @ x_prediction
+    #     message.local_info.Y = inv(P_prediction)
+    #     message.local_info.y = message.local_info.Y @ x_prediction
 
-        message.propagated = True
+    #     message.propagated = True
 
     def generate_Q(self, time_delta):
         Q_clock = block_diag(
@@ -167,14 +181,15 @@ class Unscented_Information_Filter:
         return sigma_points
 
     def local_update(self):
-        # State estimate from prediction
-        x_prediction, P_prediction = invert(self.y_k_k, self.Y_k_k)
+        x_prediction = self.x.copy()
+        P_prediction = self.P.copy()
 
         # Recompute sigma points with process noise included
         chi = self.generate_sigma_points(x_prediction, P_prediction)
 
         # Get measurements
-        y = self.sensors.true_measurement()
+        set_trace()
+        # y = self.sensors.true_measurement()
 
         upsilon = [self.sensors.predict_measurement(chi_i) for chi_i in chi]
 
@@ -203,20 +218,17 @@ class Unscented_Information_Filter:
             + R
         )
 
-        H = np.atleast_2d((inv(P_prediction) @ P_xy).T)
+        K = P_xy @ inv(P_yy)
         r = y - y_prediction
+        # set_trace()
 
-        i = H.T @ inv(R) @ (r + H @ x_prediction)
-        I = H.T @ inv(R) @ H
+        x_hat = x_prediction + K @ r
+        P = P_prediction - K @ P_yy @ K.T
 
-        self.y_k_k += i
-        self.Y_k_k += I
+        self.x = x_hat
+        self.P = P
 
-        self.local_info = Information(copy(self.y_k_k), copy(self.Y_k_k))
-
-        x_local = invert(self.y_k_k, self.Y_k_k)[0]
-
-        r_post_fit = y - self.sensors.predict_measurement(x_local)
+        r_post_fit = y - self.sensors.predict_measurement(x_hat)
 
         self.sensors.log_measurements(y)
         self.sensors.log_residuals(r, pre=True)
@@ -224,121 +236,38 @@ class Unscented_Information_Filter:
         self.sensors.log_R(R)
         self.sensors.log_P_yy(P_yy)
 
-    def iterate(self):
-        converged = False
+    # def fusion_update(self):
+    #     # Local
+    #     local_info = Information(copy(self.y_k_k), copy(self.Y_k_k))
+    #     x_local_info = invert(local_info.y, local_info.Y)[0]
 
-        x, P = invert(self.y_k_k, self.Y_k_k)
+    #     # x_true = self.state_log.get_true()
 
-        y = self.sensors.true_measurement()
+    #     # Message
+    #     messages_info = []
 
-        g = 1
-        eta = 0.9
-        N = 3
+    #     for message in self.agent.estimator.message_queue:
+    #         message_info = message.local_info
+    #         messages_info.append(message_info)
 
-        count = 0
+    #         x_message_info = invert(message_info.y, message_info.Y)[0]
 
-        while not converged:
-            chi = self.generate_sigma_points(x, P)
+    #     # Fused
+    #     information_set = [local_info] + messages_info
+    #     fused_info = covariance_intersection(information_set, fast=True)
+    #     # fused_info = covariance_intersection(information_set, sensors=self.sensors)
+    #     x_fused_info = invert(fused_info.y, fused_info.Y)[0]
 
-            x_prediction = sum([w * chi_value for w, chi_value in zip(self.w_m, chi)])
+    #     y = self.sensors.true_measurement()
 
-            upsilon = [self.sensors.predict_measurement(chi_i) for chi_i in chi]
+    #     y_prediction = self.sensors.predict_measurement(x_fused_info)
 
-            y_prediction = sum(
-                [w * upsilon_i for w, upsilon_i in zip(self.w_m, upsilon)]
-            )
+    #     r_post_fusion = y - y_prediction
 
-            R = self.sensors.generate_R()
+    #     self.sensors.log_residuals(r_post_fusion, fused=True)
 
-            P_yy = (
-                sum(
-                    [
-                        w
-                        * (upsilon_i - y_prediction)[np.newaxis].T
-                        @ (upsilon_i - y_prediction)[np.newaxis]
-                        for w, upsilon_i in zip(self.w_c, upsilon)
-                    ]
-                )
-                + R
-            )
-
-            P_xy = sum(
-                [
-                    w
-                    * (chi_i - x_prediction)[np.newaxis].T
-                    @ (upsilon_i - y_prediction)[np.newaxis]
-                    for w, chi_i, upsilon_i in zip(self.w_c, chi, upsilon)
-                ]
-            )
-
-            K = P_xy @ inv(P_yy)
-            r = y - y_prediction
-
-            x_new = x_prediction + g * K @ r
-            P_new = P - K @ P_yy @ K.T
-
-            # Check convergence
-            y_hat = self.sensors.predict_measurement(x)
-            y_hat_new = self.sensors.predict_measurement(x_new)
-            x_tilde = x_new - x
-            y_tilde = y - y_hat
-            y_tilde_new = y - y_hat_new
-
-            if (
-                x_tilde.T @ inv(P) @ x_tilde + y_tilde_new.T @ inv(R) @ y_tilde_new
-                < y_tilde.T @ inv(R) @ y_tilde
-            ) and count < N:
-                g *= eta
-            else:
-                converged = True
-
-            # Update x, P
-            x = x_new
-            P = P_new
-
-            count += 1
-
-        self.state_log.log_residuals_post_iteration(r)
-
-        self.Y_k_k = inv(P)
-        self.y_k_k = self.Y_k_k @ x
-
-        self.local_info = Information(copy(self.y_k_k), copy(self.Y_k_k))
-
-        x_local = invert(self.y_k_k, self.Y_k_k)[0]
-
-    def fusion_update(self):
-        # Local
-        local_info = Information(copy(self.y_k_k), copy(self.Y_k_k))
-        x_local_info = invert(local_info.y, local_info.Y)[0]
-
-        # x_true = self.state_log.get_true()
-
-        # Message
-        messages_info = []
-
-        for message in self.agent.estimator.message_queue:
-            message_info = message.local_info
-            messages_info.append(message_info)
-
-            x_message_info = invert(message_info.y, message_info.Y)[0]
-
-        # Fused
-        information_set = [local_info] + messages_info
-        fused_info = covariance_intersection(information_set, fast=True)
-        # fused_info = covariance_intersection(information_set, sensors=self.sensors)
-        x_fused_info = invert(fused_info.y, fused_info.Y)[0]
-
-        y = self.sensors.true_measurement()
-
-        y_prediction = self.sensors.predict_measurement(x_fused_info)
-
-        r_post_fusion = y - y_prediction
-
-        self.sensors.log_residuals(r_post_fusion, fused=True)
-
-        self.y_k_k = fused_info.y
-        self.Y_k_k = fused_info.Y
+    #     self.y_k_k = fused_info.y
+    #     self.Y_k_k = fused_info.Y
 
     def step(self):
         self.state_log.log_state()
@@ -359,18 +288,23 @@ class Unscented_Information_Filter:
 
         return tau
 
-    def get_local_info(self):
-        return copy(self.local_info)
+    # def get_local_info(self):
+    # local_info_copy = copy(self.local_info)
+    # local_info_copy.time = copy(self.t_kp1)
+    # return local_info_copy
+
+    def get_event_triggering_measurements(self):
+        return self.event_triggering_messages
 
     def get_rover_state_estimate(self):
-        x, _ = invert(self.y_k_k, self.Y_k_k)
+        x = self.x.copy()
 
         x_rover = self.env.dynamics.get_rover_state_estimate(self.agent.name, x)
 
         return x_rover
 
     def get_clock_estimate(self, agent_name=""):
-        x, _ = invert(self.y_k_k, self.Y_k_k)
+        x = self.x.copy()
 
         if not agent_name:
             agent_name = self.agent.name
@@ -381,7 +315,7 @@ class Unscented_Information_Filter:
 
     def get_time_estimate(self, x=np.array([])):
         if x.size == 0:
-            x, _ = invert(self.y_k_k, self.Y_k_k)
+            x = self.x.copy()
 
         Delta, _ = self.env.dynamics.Delta_functions[self.agent.name](*x)
 

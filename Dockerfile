@@ -24,6 +24,16 @@ RUN apt-get update && apt-get install -y \
 ENV ROS_WS /opt/ros_ws
 ENV ROS_PYTHON_VERSION 3
 
+# Pip installs
+RUN pip3 install numpy
+RUN pip3 install scipy
+RUN pip3 install sympy
+RUN pip3 install pandas
+RUN pip3 install rospkg
+RUN pip3 install simpy
+RUN pip3 install progressbar2
+RUN pip3 install matplotlib
+
 WORKDIR $ROS_WS
 
 # Use bash because of setup.bash files

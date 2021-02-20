@@ -22,13 +22,13 @@ class Agent:
         self.clock = Clock(self.env, self)
 
         # Radio
-        # self.radio = Radio(self.env, self)
+        self.radio = Radio(self.env, self)
 
         # Sensors
-        # self.sensors = Sensors(self.env, self)
+        self.sensors = Sensors(self.env, self)
 
         # Estimator
-        # self.estimator = Estimator(self.env, self)
+        self.estimator = Estimator(self.env, self)
 
     def __repr__(self):
         return str(self.name)

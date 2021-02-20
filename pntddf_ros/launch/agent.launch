@@ -1,7 +1,6 @@
 <launch>
   <arg name="agent_name" />
   <param name="agent_name" type="string" value="$(arg agent_name)" />
-  <group ns="agents">
-    <node name="agent" pkg="pntddf_ros" type="agent_wrapper.py" output="screen" />
-  </group>
+
+  <node name="agent_$(arg agent_name)" pkg="pntddf_ros" type="agent_wrapper.py" output="screen" />
 </launch>

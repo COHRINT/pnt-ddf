@@ -2,7 +2,7 @@ from copy import copy
 
 from bpdb import set_trace
 
-from pntddf.filters import Unscented_Information_Filter
+from pntddf.filters import LSQ_Filter, Unscented_Kalman_Filter
 from pntddf.information import invert
 
 
@@ -11,35 +11,34 @@ class Estimator:
         self.env = env
         self.agent = agent
 
-        self.filt = Unscented_Information_Filter(self.env, agent)
+        self.measurement_queue = []
+        self.measurement_queue_centralized = []
 
-        self.new_information_for_radio = False
+        # Main Filter
+        self.filt = Unscented_Kalman_Filter(self.env, agent)
 
-        self.message_queue = []
-        self.message_queue_centralized = []
+        # Initial filter
+        self.lsq_init_completed = True
+        if self.env.lsq_init:
+            self.lsq_filter = LSQ_Filter(self.env, agent)
 
-    def new_message(self, message):
-        self.message_queue.append(message)
-        self.message_queue = sorted(
-            self.message_queue, key=lambda msg: msg.transmitter.name
-        )
-        self.message_queue_centralized.append(copy(message))
-        self.message_queue_centralized = sorted(
-            self.message_queue_centralized, key=lambda msg: msg.transmitter.name
-        )
+    def new_measurement(self, measurement):
+        self.measurement_queue.append(measurement)
+        self.measurement_queue_centralized.append(copy(measurement))
 
     def run_filter(self):
         self.set_time()
+
+        if self.env.lsq_init and not self.lsq_init_completed:
+            self.lsq_filter.estimate(self.message_queue)
+
         self.prediction()
 
-        if len(self.message_queue) >= self.env.NUM_AGENTS - 1:
-            self.local_update()
+        self.local_update()
 
-            # self.iterate()
+        # self.fusion_update()
 
-            self.fusion_update()
-
-            self.step()
+        self.step()
 
     def set_time(self):
         self.filt.set_time()
@@ -47,14 +46,11 @@ class Estimator:
     def prediction(self):
         self.filt.predict_self()
 
-        for message in self.message_queue:
-            self.filt.predict_message(message)
+        # for message in self.message_queue:
+        # self.filt.predict_message(message)
 
     def local_update(self):
         self.filt.local_update()
-
-    def iterate(self):
-        self.filt.iterate()
 
     def fusion_update(self):
         self.filt.fusion_update()
@@ -64,16 +60,20 @@ class Estimator:
         self.filt.step()
 
     def get_state_estimate(self):
-        x, P = invert(self.agent.estimator.filt.y_k_k, self.agent.estimator.filt.Y_k_k)
+        x = self.agent.estimator.filt.x.copy()
 
         return x
 
-    def get_local_info(self):
-        self.run_filter()
-        if self.env.centralized:
-            self.env.agent_centralized.estimator.run_filter(self.agent.name)
+    # def get_local_info(self):
+    #     self.run_filter()
 
-        return self.filt.get_local_info()
+    #     if self.env.centralized:
+    #         self.env.agent_centralized.estimator.run_filter(self.agent.name)
+
+    #     return self.filt.get_local_info()
+
+    def get_event_triggering_measurements(self):
+        return self.filt.get_event_triggering_measurements()
 
     def get_clock_estimate(self):
         return self.filt.get_clock_estimate()

@@ -40,6 +40,13 @@ def setup_env(config_file, ros=False):
     # Filter config
     env.filter_config = config["FILTER"]
 
+    # ET config
+    env.et_config = config["ET"]
+    env.delta = env.et_config.getfloat("delta")
+
+    # Initialize with least squares?
+    env.lsq_init = config.getboolean("ENV", "lsq_init")
+
     # N DIM
     env.n_dim = config.getint("ENV", "n_dim")
 
@@ -144,14 +151,9 @@ def setup_env(config_file, ros=False):
     assert len(env.x0) == env.NUM_STATES
 
     # Create agents
-    if not env.ros:
-        env.agents = [Agent(env, name) for name in env.AGENT_NAMES]
+    env.agents = [Agent(env, name) for name in env.AGENT_NAMES]
 
-        env.agent_dict = {
-            name: agent for name, agent in zip(env.AGENT_NAMES, env.agents)
-        }
-    else:
-        pass
+    env.agent_dict = {name: agent for name, agent in zip(env.AGENT_NAMES, env.agents)}
 
     # Centralized
     env.centralized = config.getboolean("ENV", "centralized")

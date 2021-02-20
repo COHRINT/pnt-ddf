@@ -6,8 +6,6 @@ import pandas as pd
 from bpdb import set_trace
 from numpy.linalg import inv
 
-from pntddf.information import invert
-
 
 class State_Log:
     def __init__(self, env, agent):
@@ -32,7 +30,8 @@ class State_Log:
     def log_state(self):
         t = self.agent.clock.magic_time()
 
-        x, P = invert(self.agent.estimator.filt.y_k_k, self.agent.estimator.filt.Y_k_k)
+        x = self.agent.estimator.filt.x.copy()
+        P = self.agent.estimator.filt.P.copy()
 
         t_estimate = self.agent.estimator.filt.get_time_estimate()
 
@@ -71,7 +70,7 @@ class State_Log:
     def log_u(self):
         t_estimate = self.agent.estimator.filt.get_time_estimate()
 
-        x, _ = invert(self.agent.estimator.filt.y_k_k, self.agent.estimator.filt.Y_k_k)
+        x = self.agent.estimator.filt.x.copy()
 
         u = self.env.dynamics.u(t_estimate, x)
 
@@ -84,11 +83,13 @@ class State_Log:
 
     def log_NEES_errors(self):
         # State
-        x, P = invert(self.agent.estimator.filt.y_k_k, self.agent.estimator.filt.Y_k_k)
+        x = self.agent.estimator.filt.x.copy()
+        P = self.agent.estimator.filt.P.copy()
+
         x_true = self.get_true()
         e_x = x - x_true
 
-        epsilon_x = e_x @ self.agent.estimator.filt.Y_k_k @ e_x
+        epsilon_x = e_x @ inv(P) @ e_x
 
         # Measurements
         # e_z = self._log_residuals[-1]

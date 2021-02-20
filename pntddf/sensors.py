@@ -6,10 +6,7 @@ import pandas as pd
 from bpdb import set_trace
 from scipy.linalg import block_diag
 
-from pntddf.camera import Camera
 from pntddf.gps import GPS
-from pntddf.magnetometer import Magnetometer
-from pntddf.odometer import Odometer
 from pntddf.ranging_module import Ranging_Module
 
 
@@ -32,29 +29,6 @@ class Sensors:
         if self.agent.config.getboolean("gps"):
             self.gps = GPS(self.env, self.agent)
             self.sensors.append(self.gps)
-
-        # Odometer
-        if self.agent.config.getboolean("odometer"):
-            self.odometer = Odometer(self.env, self.agent)
-            self.sensors.append(self.odometer)
-            self.measurement_names.append("odom")
-            self.measurement_names_latex.append("Odometry")
-
-        # Magnetometer
-        if self.agent.config.getboolean("magnetometer"):
-            self.magnetometer = Magnetometer(self.env, self.agent)
-            self.sensors.append(self.magnetometer)
-            self.measurement_names.append("magnetometer")
-            self.measurement_names_latex.append("Magnetometer")
-
-        # Camera
-        if self.agent.config.getboolean("camera"):
-            self.camera = Camera(self.env, self.agent)
-            self.sensors.append(self.camera)
-            self.measurement_names.append("camera_r")
-            self.measurement_names.append("camera_theta")
-            self.measurement_names_latex.append("Camera $r$")
-            self.measurement_names_latex.append("Camera $\\theta$")
 
         # Measurement names
         self.measurement_names = []
