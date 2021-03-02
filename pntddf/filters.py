@@ -1,3 +1,4 @@
+import re
 from copy import copy
 
 import numpy as np
@@ -5,6 +6,8 @@ from bpdb import set_trace
 from numpy import sqrt
 from numpy.linalg import cholesky, inv, norm
 from scipy.linalg import block_diag
+from scipy.optimize import least_squares
+from scipy.special import erf
 
 from pntddf.covariance_intersection import covariance_intersection
 from pntddf.information import Information, invert
@@ -22,8 +25,80 @@ class LSQ_Filter:
         self.env = env
         self.agent = agent
 
-    def estimate(self, message_queue):
-        set_trace()
+        self.local_measurements_for_retransmission = []
+
+    def estimate(self):
+        completed = False
+
+        measurements = self.agent.estimator.measurement_queue
+
+        duplex_pairs = set(self.env.PAIRS_DUPLEX)
+        measurement_pairs = set(
+            [meas.receiver.name + meas.transmitter.name for meas in measurements]
+        )
+
+        # agent_names = set(self.env.AGENT_NAMES)
+        # transmitter_names = set(
+        # np.unique([meas.transmitter.name for meas in measurements])
+        # )
+        # receiver_names = set(np.unique([meas.receiver.name for meas in measurements]))
+
+        # all_measurement_pairs = (len(agent_names - transmitter_names) == 0) and (
+        # len(agent_names - receiver_names) == 0
+        # )
+        all_measurement_pairs = len(duplex_pairs - measurement_pairs) == 0
+
+        if all_measurement_pairs:
+            x0 = self.env.x0.copy()
+            lower_bounds = np.array(
+                [
+                    -1e-3 if re.match(r"[xyz]_dot", str(state)) else -np.inf
+                    for state in self.env.dynamics.x_vec
+                ]
+            )
+            upper_bounds = np.array(
+                [
+                    1e-3 if re.match(r"[xyz]_dot", str(state)) else np.inf
+                    for state in self.env.dynamics.x_vec
+                ]
+            )
+            bounds = (lower_bounds, upper_bounds)
+            lsq_result = least_squares(self.lsq_func, x0, bounds=bounds)
+
+            if lsq_result.success:
+                completed = True
+                H = lsq_result.jac
+                R = np.diag([measurement.R for measurement in measurements])
+                P = inv(H.T @ inv(R) @ H)
+                time_delta = self.env.TRANSMISSION_WINDOW * self.env.NUM_AGENTS
+                Q = self.agent.estimator.filt.generate_Q(time_delta)
+                self.x = lsq_result.x
+                self.P = P + Q
+
+        if not completed:
+            self.add_local_measurements(measurements)
+
+        return completed
+
+    def lsq_func(self, x):
+        measurements = self.agent.estimator.measurement_queue
+
+        residuals = np.array(
+            [measurement.true - measurement.predict(x) for measurement in measurements]
+        )
+        return residuals
+
+    def add_local_measurements(self, measurements):
+        for measurement in measurements:
+            if measurement.local:
+                measurement.local = False
+                measurement.explicit = True
+                self.local_measurements_for_retransmission.append(measurement)
+
+    def get_local_measurements_for_retransmission(self):
+        local_measurements = copy(self.local_measurements_for_retransmission)
+        self.local_measurements_for_retransmission = []
+        return local_measurements
 
 
 class Unscented_Kalman_Filter:
@@ -44,9 +119,16 @@ class Unscented_Kalman_Filter:
         self.define_event_triggering_measurements()
         self.define_constants()
 
-    def define_initial_state(self):
-        self.x = self.env.x0.copy()
-        self.P = self.env.P0.copy()
+    def define_initial_state(self, x=np.array([]), P=np.array([])):
+        if x.size == 0:
+            self.x = self.env.x0.copy()
+        else:
+            self.x = x
+
+        if P.size == 0:
+            self.P = self.env.P0.copy()
+        else:
+            self.P = P
 
     def define_event_triggering_measurements(self):
         self.event_triggering_messages = []
@@ -184,57 +266,117 @@ class Unscented_Kalman_Filter:
         x_prediction = self.x.copy()
         P_prediction = self.P.copy()
 
-        # Recompute sigma points with process noise included
-        chi = self.generate_sigma_points(x_prediction, P_prediction)
+        # x_true = self.state_log.get_true()
+        # x_prediction = x_true
 
-        # Get measurements
-        set_trace()
-        # y = self.sensors.true_measurement()
+        # Store reference estimate
+        x_ref = x_prediction.copy()
+        P_ref = P_prediction.copy()
 
-        upsilon = [self.sensors.predict_measurement(chi_i) for chi_i in chi]
+        for measurement in self.agent.estimator.measurement_queue:
+            chi = self.generate_sigma_points(x_prediction, P_prediction)
 
-        y_prediction = sum([w * upsilon_i for w, upsilon_i in zip(self.w_m, upsilon)])
+            upsilon = [measurement.predict(chi_i) for chi_i in chi]
 
-        P_xy = sum(
-            [
-                w
-                * (chi_i - x_prediction)[np.newaxis].T
-                @ (upsilon_i - y_prediction)[np.newaxis]
-                for w, chi_i, upsilon_i in zip(self.w_c, chi, upsilon)
-            ]
-        )
+            y_prediction = sum(
+                [w * upsilon_i for w, upsilon_i in zip(self.w_m, upsilon)]
+            )
 
-        R = self.sensors.generate_R(x_prediction)
-
-        P_yy = (
-            sum(
+            P_xy = sum(
                 [
                     w
-                    * (upsilon_i - y_prediction)[np.newaxis].T
+                    * (chi_i - x_prediction)[np.newaxis].T
                     @ (upsilon_i - y_prediction)[np.newaxis]
-                    for w, upsilon_i in zip(self.w_c, upsilon)
+                    for w, chi_i, upsilon_i in zip(self.w_c, chi, upsilon)
                 ]
             )
-            + R
-        )
 
-        K = P_xy @ inv(P_yy)
-        r = y - y_prediction
-        # set_trace()
+            R = measurement.R
 
-        x_hat = x_prediction + K @ r
-        P = P_prediction - K @ P_yy @ K.T
+            P_yy = (
+                sum(
+                    [
+                        w
+                        * (upsilon_i - y_prediction)[np.newaxis].T
+                        @ (upsilon_i - y_prediction)[np.newaxis]
+                        for w, upsilon_i in zip(self.w_c, upsilon)
+                    ]
+                )
+                + R
+            )
 
-        self.x = x_hat
-        self.P = P
+            if measurement.implicit:
+                phi = lambda z: (1 / np.sqrt(2 * np.pi)) * np.exp(-0.5 * (z ** 2))
+                Qfxn = lambda x: 1 - 0.5 * (1 + erf(x / np.sqrt(2)))
 
-        r_post_fit = y - self.sensors.predict_measurement(x_hat)
+                mu = measurement.predict(x_prediction) - measurement.predict(x_ref)
+                Q_e = P_yy
+                alpha = measurement.predict(x_ref) - measurement.predict(x_ref)
 
-        self.sensors.log_measurements(y)
-        self.sensors.log_residuals(r, pre=True)
-        self.sensors.log_residuals(r_post_fit, post=True)
-        self.sensors.log_R(R)
-        self.sensors.log_P_yy(P_yy)
+                nu_minus = (-self.env.delta + alpha - mu) / np.sqrt(Q_e)
+                nu_plus = (self.env.delta + alpha - mu) / np.sqrt(Q_e)
+
+                try:
+                    assert Qfxn(nu_minus) - Qfxn(nu_plus) != 0.0
+                except:
+                    set_trace()
+
+                z_bar = (
+                    (phi(nu_minus) - phi(nu_plus))
+                    / (Qfxn(nu_minus) - Qfxn(nu_plus))
+                    * np.sqrt(Q_e)
+                )
+                var_theta = (
+                    (phi(nu_minus) - phi(nu_plus)) / (Qfxn(nu_minus) - Qfxn(nu_plus))
+                ) ** 2 - (
+                    ((nu_minus) * phi(nu_minus) - nu_plus * phi(nu_plus))
+                    / (Qfxn(nu_minus) - Qfxn(nu_plus))
+                )
+                K = np.array(P_xy / P_yy, ndmin=2)
+
+                measurement.r = z_bar
+                measurement.t = self.agent.clock.magic_time()
+                measurement.P_yy_sigma = np.sqrt(P_yy)
+                x_prediction = (x_prediction + K * z_bar).ravel()
+                P_prediction = P_prediction - var_theta * P_yy * (K.T @ K)
+
+                if self.env.now > 100:
+                    set_trace()
+
+            else:
+                y = measurement.true
+                K = np.array(P_xy / P_yy, ndmin=2)
+
+                r = y - y_prediction
+                measurement.r = r
+                measurement.t = self.agent.clock.magic_time()
+                measurement.P_yy_sigma = np.sqrt(P_yy)
+                x_prediction = (x_prediction + K * r).ravel()
+                P_prediction = P_prediction - P_yy * (K.T @ K)
+
+            if measurement.local:
+                # Check if measurement is expected to be surprising
+                y_ref = measurement.predict(x_ref)
+                y = measurement.true
+                r_ref = y - y_ref
+
+                meas = copy(measurement)
+                meas.local = False
+                # if self.agent.name == "T":
+                # P_b_T = P_prediction[2, 2]
+                # P_x_T = P_prediction[4, 4]
+                # P_xb_T = P_prediction[2, 4]
+                if np.abs(r_ref) > self.env.delta:
+                    meas.explicit = True
+                    meas.implicit = False
+                else:
+                    meas.explicit = False
+                    meas.implicit = True
+
+                    self.event_triggering_messages.append(meas)
+
+        self.x = x_prediction
+        self.P = P_prediction
 
     # def fusion_update(self):
     #     # Local
@@ -294,7 +436,9 @@ class Unscented_Kalman_Filter:
     # return local_info_copy
 
     def get_event_triggering_measurements(self):
-        return self.event_triggering_messages
+        et_messages = copy(self.event_triggering_messages)
+        self.event_triggering_messages = []
+        return et_messages
 
     def get_rover_state_estimate(self):
         x = self.x.copy()

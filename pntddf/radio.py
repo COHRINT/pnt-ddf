@@ -67,6 +67,7 @@ class Radio:
     def prepare_message(self):
         self.message = Message()
         pseudorange = Pseudorange(self.env)
+        pseudorange.local = True
         self.message.pseudorange = pseudorange
 
         # Transmitter
@@ -74,9 +75,9 @@ class Radio:
         pseudorange.transmitter = self.agent
 
         # Transmit time
-        time_transmit = self.agent.clock.time()
-        self.message.time_transmit = time_transmit
-        pseudorange.time_transmit = time_transmit
+        timestamp_transmit = self.agent.clock.time()
+        self.message.timestamp_transmit = timestamp_transmit
+        pseudorange.timestamp_transmit = timestamp_transmit
 
         self.agent.estimator.run_filter()
 
@@ -105,17 +106,19 @@ class Radio:
     def receive(self, message):
         self.beacon_process.interrupt()
 
-        time_receive = self.agent.clock.time()
-        message.time_receive = time_receive
-        message.pseudorange.time_receive = time_receive
+        timestamp_receive = self.agent.clock.time()
+        message.timestamp_receive = timestamp_receive
+        message.pseudorange.timestamp_receive = timestamp_receive
 
         self.receive_log[message.transmitter.name].append(
-            (self.agent.clock.magic_time(), message.time_receive)
+            (self.agent.clock.magic_time(), message.timestamp_receive)
         )
 
         # Pass the measurements to estimator
         self.agent.estimator.new_measurement(message.pseudorange)
         for measurement in message.measurements:
+            measurement = copy(measurement)
+            measurement.time_receive = timestamp_receive
             self.agent.estimator.new_measurement(measurement)
 
 

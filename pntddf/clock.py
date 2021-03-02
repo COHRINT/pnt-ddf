@@ -42,6 +42,8 @@ class Clock:
             self.sigma_clock_process = self.agent.config.getfloat("sigma_clock_process")
 
         self.sigma_clock_reading = self.agent.config.getfloat("sigma_clock_reading")
+        # self.sigma_clock_reading = 0
+        # self.sigma_clock_process = 0
 
     def update_time(self):
         # T is time delta since last clock check

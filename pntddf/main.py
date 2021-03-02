@@ -4,13 +4,11 @@ from bpdb import set_trace
 
 from pntddf.env import setup_env
 from pntddf.results import (plot_b, plot_b_dot, plot_residuals,
-                            plot_residuals_post_fusion,
-                            plot_residuals_post_iteration,
                             plot_rover_state_errors, plot_test, plot_time,
                             plot_trajectory)
 
-config_file = "../config/sim.config"
-# config_file = "../config/1d.config"
+# config_file = "../config/sim.config"
+config_file = "../config/1d.config"
 
 env = setup_env(config_file)
 
@@ -30,8 +28,6 @@ plots = [
     plot_rover_state_errors,
     plot_trajectory,
     plot_residuals,
-    plot_residuals_post_fusion,
-    plot_residuals_post_iteration,
     plot_time,
 ]
 

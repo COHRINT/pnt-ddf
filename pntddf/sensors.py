@@ -1,155 +1,86 @@
-import itertools
-from functools import reduce
-
 import numpy as np
-import pandas as pd
 from bpdb import set_trace
-from scipy.linalg import block_diag
-
-from pntddf.gps import GPS
-from pntddf.ranging_module import Ranging_Module
+from sympy import Matrix, symbols
+from sympy.utilities.lambdify import lambdify
 
 
 class Sensors:
-    def __init__(self, env, agent, centralized=False):
+    def __init__(self, env, agent):
         self.env = env
         self.agent = agent
-        self.centralized = centralized
 
-        self.define_sensors()
+        self.define_measurement_models()
 
-    def define_sensors(self):
-        self.sensors = []
+    def define_measurement_models(self):
+        self.define_pseudorange_model()
 
-        # Ranging Module
-        self.ranging_module = Ranging_Module(self.env, self.agent)
-        self.sensors.append(self.ranging_module)
+    def define_pseudorange_model(self):
+        self.evaluate_pseudorange = {}
 
-        # GPS
-        if self.agent.config.getboolean("gps"):
-            self.gps = GPS(self.env, self.agent)
-            self.sensors.append(self.gps)
+        tau_process_func = (
+            lambda Y, Z: (
+                (self.env.AGENT_NAMES.index(Y) - self.env.AGENT_NAMES.index(Z))
+                % self.env.NUM_AGENTS
+            )
+            * self.env.TRANSMISSION_WINDOW
+        )
 
-        # Measurement names
-        self.measurement_names = []
-        self.measurement_names_latex = []
+        for T in self.env.AGENT_NAMES:
+            for R in self.env.AGENT_NAMES:
+                for P in self.env.AGENT_NAMES:
+                    if T == R:
+                        continue
 
-        for sensor in self.sensors:
-            self.measurement_names.extend(sensor.measurement_names)
-            self.measurement_names_latex.extend(sensor.measurement_names_latex)
+                    # processing times
+                    tau_process_RT = tau_process_func(R, T)
+                    tau_process_PR = tau_process_func(P, R)
 
-    def get_message_queue(self):
-        if not self.centralized:
-            message_queue = self.agent.estimator.message_queue
-        else:
-            message_queue = self.env.agent_centralized.estimator.message_queue
+                    # symbolic position of processor
+                    x_P = self.env.dynamics.get_sym_position(P)
 
-        return message_queue
+                    # symbolic position of receiver
+                    x_R_rT = self.env.dynamics.get_sym_position(R)
+                    # symbolic velocity of receiver
+                    x_dot_R_rT = self.env.dynamics.get_sym_velocity(R)
+                    # symbolic delay of receiver
+                    b_R_rT = self.env.dynamics.get_sym("b", R)
+                    # symbolic delay rate of receiver
+                    b_dot_R_rT = self.env.dynamics.get_sym("b_dot", R)
 
-    def true_measurement(self):
-        message_queue = self.get_message_queue()
+                    # symbolic position of transmitter
+                    x_T_rT = self.env.dynamics.get_sym_position(T)
+                    # symbolic velocity of transmitter
+                    x_dot_T_rT = self.env.dynamics.get_sym_velocity(T)
+                    # symbolic delay of transmitter
+                    b_T_rT = self.env.dynamics.get_sym("b", T)
+                    # symbolic delay rate of transmitter
+                    b_dot_T_rT = self.env.dynamics.get_sym("b_dot", T)
 
-        y = [
-            sensor.true_measurement()
-            if not isinstance(sensor, Ranging_Module)
-            else sensor.true_measurement(message_queue)
-            for sensor in self.sensors
-        ]
+                    # time-of-flight
+                    # tau_dist_PR = Matrix(x_P - x_R_rT).norm() / self.env.c
+                    # tau_dist_RT = Matrix(x_R_rT - x_T_rT).norm() / self.env.c
+                    # These are approximately zero and the symbolic norm() takes forever
+                    tau_dist_PR = 0
+                    tau_dist_RT = 0
 
-        self.y_lengths = list(map(len, y))
+                    # symbolic position/bias of receiver when message was received
+                    tau_receiver = tau_process_PR + tau_dist_PR + tau_process_RT
+                    x_R_tR = x_R_rT - x_dot_R_rT * tau_receiver
+                    b_R_tR = b_R_rT - b_dot_R_rT * tau_receiver
 
-        return np.concatenate(y).astype(np.float)
+                    # symbolic position/bias of transmitter when message was transmitted
+                    tau_transmitter = tau_receiver + tau_dist_RT
+                    x_T_tT = x_T_rT - x_dot_T_rT * tau_transmitter
+                    b_T_tT = b_T_rT - b_dot_T_rT * tau_transmitter
 
-    def predict_measurement(self, x_hat):
-        message_queue = self.get_message_queue()
+                    # symbolic distance
+                    d = Matrix(x_R_tR - x_T_tT).norm()
 
-        y_prediction = [
-            sensor.predict_measurement(x_hat)
-            if not isinstance(sensor, Ranging_Module)
-            else sensor.predict_measurement(x_hat, message_queue)
-            for sensor in self.sensors
-        ]
+                    # pseudorange measurement
+                    rho = d + b_R_tR - b_T_tT
 
-        return np.concatenate(y_prediction).astype(np.float)
-
-    def generate_R(self, x_hat):
-        message_queue = self.get_message_queue()
-
-        R = [
-            sensor.generate_R()
-            if not isinstance(sensor, Ranging_Module)
-            else sensor.generate_R(x_hat, message_queue)
-            for sensor in self.sensors
-        ]
-
-        R = block_diag(*R)
-
-        return R
-
-    def log_measurements(self, y):
-        message_queue = self.get_message_queue()
-
-        y_split = self.split(y)
-
-        for sensor, y_slice in zip(self.sensors, y_split):
-            if not isinstance(sensor, Ranging_Module):
-                sensor.log_measurement(y_slice)
-            else:
-                sensor.log_measurement(y_slice, message_queue)
-
-    def log_residuals(self, r, pre=False, post=False, fused=False):
-        assert pre or post or fused
-
-        message_queue = self.get_message_queue()
-
-        r_split = self.split(r)
-
-        for sensor, r_slice in zip(self.sensors, r_split):
-            if not isinstance(sensor, Ranging_Module):
-                sensor.log_residuals(r_slice, pre, post, fused)
-            else:
-                sensor.log_residuals(r_slice, message_queue, pre, post, fused)
-
-    def log_R(self, R):
-        R_split = self.split(R)
-
-        message_queue = self.get_message_queue()
-
-        for sensor, R_slice in zip(self.sensors, R_split):
-            if not isinstance(sensor, Ranging_Module):
-                sensor.log_R(R_slice)
-            else:
-                sensor.log_R(R_slice, message_queue)
-
-    def log_P_yy(self, P_yy):
-        P_yy_split = self.split(P_yy)
-
-        message_queue = self.get_message_queue()
-
-        for sensor, P_yy_slice in zip(self.sensors, P_yy_split):
-            if not isinstance(sensor, Ranging_Module):
-                sensor.log_P_yy(P_yy_slice)
-            else:
-                sensor.log_P_yy(P_yy_slice, message_queue)
-
-    def split(self, a):
-        if a.ndim == 1:
-            split = np.split(a, np.cumsum(self.y_lengths))[: len(self.y_lengths)]
-        elif a.ndim == 2:
-            split = []
-            for y_length, y_cum in zip(self.y_lengths, np.cumsum(self.y_lengths)):
-                begin = y_cum - y_length
-                end = y_cum
-                split.append(a[begin:end, begin:end])
-
-        return split
-
-    def get_residuals_log_df(self):
-        dfs = []
-
-        for sensor in self.sensors:
-            dfs.append(sensor.get_df())
-
-        df = reduce(lambda left, right: pd.merge(left, right, on="t"), dfs)
-
-        return df
+                    h = Matrix([rho])
+                    x_vec = self.env.dynamics.x_vec
+                    self.evaluate_pseudorange[T + R + P] = lambdify(
+                        x_vec, np.squeeze(h), "numpy"
+                    )

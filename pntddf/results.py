@@ -223,6 +223,8 @@ def plot_rover_state_errors(env, agent_name):
 
 
 def plot_trajectory(env, agent_name, show_beacons=False):
+    if env.n_dim != 2:
+        return
     agent = env.agent_dict[agent_name]
 
     df = agent.estimator.get_state_log_df()
@@ -279,11 +281,14 @@ def plot_trajectory(env, agent_name, show_beacons=False):
 def plot_residuals(env, agent_name):
     agent = env.agent_dict[agent_name]
 
-    meas_df = agent.estimator.get_residuals_log_df()
+    df_meas = agent.estimator.get_residuals_log_df()
+
+    measurement_names = df_meas.name.unique()
+    measurement_names.sort()
 
     fig, axes = plt.subplots(
-        len(agent.sensors.measurement_names),
-        figsize=(10, int(3 * len(agent.sensors.measurement_names))),
+        len(measurement_names),
+        figsize=(10, int(3 * len(measurement_names))),
         constrained_layout=True,
         squeeze=False,
     )
@@ -293,188 +298,39 @@ def plot_residuals(env, agent_name):
         "Agent {} Measurement Residuals".format(agent.name), fontsize="xx-large"
     )
 
-    for index, measurement_name in enumerate(agent.sensors.measurement_names):
-        df = (
-            meas_df[meas_df["{}_P_yy_sigma".format(measurement_name)].notna()]
-            .dropna(axis=1)
-            .copy()
-        )
-        sigma = df["{}_P_yy_sigma".format(measurement_name)]
+    for index, measurement_name in enumerate(measurement_names):
+        df = df_meas[df_meas.name == measurement_name]
+        if df.empty:
+            continue
+        for meas_type, color in zip(
+            ["local", "implicit", "explicit"], ["C0", "C1", "C2"]
+        ):
+            df_ = df[df[meas_type]]
+            axes[index].plot(
+                df_.t, df_.r, marker=".", ls="None", color=color, label=meas_type
+            )
+
         axes[index].plot(
             df.t,
-            df["{}_residual_pre_fit".format(measurement_name)],
-            marker=".",
-            linestyle="None",
-            color="C0",
-        )
-        axes[index].plot(
-            df.t,
-            df["{}_residual_post_fit".format(measurement_name)],
-            marker=".",
-            linestyle="None",
-            color="C1",
-        )
-        axes[index].plot(
-            df.t,
-            +2 * sigma,
+            +2 * df.P_yy_sigma,
             linestyle="--",
             color="k",
         )
         axes[index].plot(
             df.t,
-            -2 * sigma,
+            -2 * df.P_yy_sigma,
             linestyle="--",
             color="k",
         )
 
+        axes[index].legend()
         axes[index].set(
             xlabel="$t$ [ s ]",
-            ylabel="{} Residuals [ m ]".format(
-                agent.sensors.measurement_names_latex[index]
-            ),
-            ylim=[
-                -5 * sigma.iloc[-1],
-                5 * sigma.iloc[-1],
-            ],
+            ylabel="{} Residuals [ m ]".format(df.latex_name.iloc[0]),
         )
 
     plt.savefig("images/residuals_{}.png".format(agent.name))
     plt.close()
-
-
-def plot_residuals_post_fusion(env, agent_name):
-    agent = env.agent_dict[agent_name]
-
-    df = agent.estimator.get_residuals_log_df()
-
-    if df.filter(regex="fused").empty:
-        return
-
-    fig, axes = plt.subplots(
-        len(agent.sensors.measurement_names),
-        figsize=(10, int(3 * len(agent.sensors.measurement_names))),
-        constrained_layout=True,
-        squeeze=False,
-    )
-    axes = axes.ravel()
-
-    fig.suptitle(
-        "Agent {} Measurement Residuals Post Fusion".format(agent.name),
-        fontsize="xx-large",
-    )
-
-    for index, measurement_name in enumerate(agent.sensors.measurement_names):
-        sigma = df["{}_P_yy_sigma".format(measurement_name)]
-
-        axes[index].plot(
-            df.t,
-            df["{}_residual_fused".format(measurement_name)],
-            marker=".",
-            linestyle="None",
-            color="k",
-        )
-        axes[index].plot(
-            df.t,
-            +2 * sigma,
-            linestyle="--",
-            color="C0",
-        )
-        axes[index].plot(
-            df.t,
-            -2 * sigma,
-            linestyle="--",
-            color="C0",
-        )
-
-        axes[index].set(
-            xlabel="$t$ [ s ]",
-            ylabel="{} Residuals [ m ]".format(
-                agent.sensors.measurement_names_latex[index]
-            ),
-            ylim=[
-                -5 * sigma.iloc[-1],
-                5 * sigma.iloc[-1],
-            ],
-        )
-
-    plt.savefig("images/residuals_fused_{}.png".format(agent.name))
-    plt.close()
-
-
-def plot_residuals_post_iteration(env, agent_name):
-    agent = env.agent_dict[agent_name]
-
-    df = agent.estimator.get_residuals_log_df()
-
-    if df.filter(regex="iteration").empty:
-        return
-
-    fig, axes = plt.subplots(
-        len(agent.sensors.measurement_names),
-        figsize=(10, int(3 * len(agent.sensors.measurement_names))),
-        constrained_layout=True,
-        squeeze=False,
-    )
-    axes = axes.ravel()
-
-    fig.suptitle(
-        "Agent {} Measurement Residuals Post Iteration".format(agent.name),
-        fontsize="xx-large",
-    )
-
-    for index, measurement_name in enumerate(agent.sensors.measurement_names):
-        sigma = df["{}_sigma".format(measurement_name)]
-
-        axes[index].plot(
-            df.t,
-            df["{}_post_iteration_residual".format(measurement_name)],
-            marker=".",
-            linestyle="None",
-            color="k",
-        )
-        axes[index].plot(
-            df.t,
-            +2 * sigma,
-            linestyle="--",
-            color="C0",
-        )
-        axes[index].plot(
-            df.t,
-            -2 * sigma,
-            linestyle="--",
-            color="C0",
-        )
-
-        axes[index].set(
-            xlabel="$t$ [ s ]",
-            ylabel="{} Residuals [ m ]".format(
-                agent.sensors.measurement_names_latex[index]
-            ),
-            ylim=[
-                -5 * sigma.iloc[-1],
-                5 * sigma.iloc[-1],
-            ],
-        )
-
-    plt.savefig("images/residuals_post_iteration_{}.png".format(agent.name))
-    plt.close()
-
-
-def plot_P(env, P):
-    fig, ax = plt.subplots(figsize=(8, 8), constrained_layout=True)
-    ax.invert_yaxis()
-
-    im = ax.pcolor(P, edgecolor="black", linestyle=":", lw=1.5)
-    fig.colorbar(im)
-
-    ax.set(
-        xticks=np.arange(env.NUM_STATES) + 0.5,
-        xticklabels=env.STATE_NAMES_LATEX,
-        yticks=np.arange(env.NUM_STATES) + 0.5,
-        yticklabels=env.STATE_NAMES_LATEX,
-    )
-
-    plt.show()
 
 
 def plot_time(env, agent_name):
