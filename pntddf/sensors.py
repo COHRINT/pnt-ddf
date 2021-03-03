@@ -13,9 +13,11 @@ class Sensors:
 
     def define_measurement_models(self):
         self.define_pseudorange_model()
+        self.define_gps_model()
 
     def define_pseudorange_model(self):
         self.evaluate_pseudorange = {}
+        self.evaluate_pseudorange_R = {}
 
         tau_process_func = (
             lambda Y, Z: (
@@ -23,6 +25,19 @@ class Sensors:
                 % self.env.NUM_AGENTS
             )
             * self.env.TRANSMISSION_WINDOW
+        )
+
+        sigma_process_func = lambda agent_name: self.env.agent_configs[
+            agent_name
+        ].getfloat("sigma_clock_process")
+        R_tau_func = lambda agent, tau: (
+            1 / 3 * tau ** 3 * sigma_process_func(agent) ** 2 * self.env.c ** 2
+        )
+        sigma_read_func = lambda agent_name: self.env.agent_configs[
+            agent_name
+        ].getfloat("sigma_clock_reading")
+        R_read_func = lambda agent_name_0, agent_name_1: self.env.c ** 2 * (
+            sigma_read_func(agent_name_0) ** 2 + sigma_read_func(agent_name_1) ** 2
         )
 
         for T in self.env.AGENT_NAMES:
@@ -78,9 +93,28 @@ class Sensors:
 
                     # pseudorange measurement
                     rho = d + b_R_tR - b_T_tT
-
                     h = Matrix([rho])
+
+                    # pseudorange noise
+                    R_read = R_read_func(T, R)
+                    R_process_transmitter = R_tau_func(T, tau_transmitter)
+                    R_process_receiver = R_tau_func(R, tau_receiver)
+
+                    R_matrix = R_read + R_process_transmitter + R_process_receiver
+
+                    # lambdify
                     x_vec = self.env.dynamics.x_vec
                     self.evaluate_pseudorange[T + R + P] = lambdify(
                         x_vec, np.squeeze(h), "numpy"
                     )
+                    self.evaluate_pseudorange_R[T + R + P] = R_matrix
+
+    def define_gps_model(self):
+        self.evaluate_gps = {}
+
+        for agent_name in self.env.AGENT_NAMES:
+            x = self.env.dynamics.get_sym_position(agent_name)
+
+            h = Matrix([x])
+            x_vec = self.env.dynamics.x_vec
+            self.evaluate_gps[agent_name] = lambdify(x_vec, np.squeeze(h), "numpy")

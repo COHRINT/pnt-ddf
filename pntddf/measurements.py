@@ -1,6 +1,7 @@
 from copy import copy
 from dataclasses import dataclass
 
+import numpy as np
 from bpdb import set_trace
 from numpy import sqrt
 from scipy.constants import c
@@ -116,6 +117,10 @@ class Pseudorange(Measurement):
         self._timestamp_receive = None
 
     @property
+    def name(self):
+        return self._name
+
+    @property
     def transmitter(self):
         return self._transmitter
 
@@ -150,6 +155,7 @@ class Pseudorange(Measurement):
     def timestamp_receive(self, timestamp_receive):
         assert self._timestamp_receive is None
         self._timestamp_receive = timestamp_receive
+        self.define_true_measurement()
 
     @property
     def true(self):
@@ -179,12 +185,65 @@ class Pseudorange(Measurement):
         return copy(self._R)
 
     def define_R(self):
-        R_sigma_clock = self.env.agent_configs[self.receiver.name].getfloat(
-            "sigma_clock_reading"
-        )
-        T_sigma_clock = self.env.agent_configs[self.transmitter.name].getfloat(
-            "sigma_clock_reading"
+        TRP = self.transmitter.name + self.receiver.name + self.processor.name
+
+        R = self.processor.sensors.evaluate_pseudorange_R[TRP]
+
+        self._R = R
+        self._sigma = copy(sqrt(R))
+
+
+class GPS_Measurement(Measurement):
+    def __init__(self, env, axis, agent):
+        super().__init__()
+
+        self.env = env
+        self.axis = axis
+        self.agent = agent
+
+        self.define_R()
+        self.define_true_measurement()
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def true(self):
+        return copy(self._true_measurement)
+
+    def predict(self, x_hat):
+        # account for time of prediction compared to time of measurement?
+
+        prediction_func = self.processor.sensors.evaluate_gps[self.agent.name]
+
+        pos = prediction_func(*x_hat)
+
+        if type(pos) == float or type(pos) == np.float64:
+            pass
+        else:
+            pos = pos[self.axis]
+
+        return pos
+
+    def define_true_measurement(self):
+        measurement = self.env.dynamics.get_true_position(self.agent.name)[self.axis]
+        noise = np.random.normal(0, self._sigma)
+        self._true_measurement = measurement + noise
+
+        self._name = "gps_{}_{}".format(self.env.dim_names[self.axis], self.agent.name)
+        self._latex_name = "GPS {} {}".format(
+            self.env.dim_names[self.axis], self.agent.name
         )
 
-        self._R = c ** 2 * (R_sigma_clock ** 2 + T_sigma_clock ** 2)
-        self._sigma = copy(sqrt(self._R))
+        self._z = copy(self._true_measurement)
+
+    @property
+    def R(self):
+        self.define_R()
+        return copy(self._R)
+
+    def define_R(self):
+        self._sigma = self.agent.config.getfloat("sigma_gps")
+
+        self._R = self._sigma ** 2

@@ -38,12 +38,10 @@ if env.centralized:
 
 counter = 0
 with progressbar.ProgressBar(max_value=len(agents_to_plot) * len(plots)) as bar:
-    for agent_name in [
-        agent for agent in env.agent_dict.keys() if agent in agents_to_plot
-    ]:
+    for agent in env.agents:
         for plot in plots:
-            plot(env, agent_name)
+            plot(env, agent)
             counter += 1
             bar.update(counter)
 
-plot_test(env, env.AGENT_NAMES[0])
+plot_test(env, env.agents[0])

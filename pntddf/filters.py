@@ -27,25 +27,27 @@ class LSQ_Filter:
 
         self.local_measurements_for_retransmission = []
 
-    def estimate(self):
-        completed = False
+        self.completed = False
+        self.broadcast_time = 2.0
 
+    def estimate(self):
         measurements = self.agent.estimator.measurement_queue
+
+        if self.completed and self.agent.clock.time() > self.broadcast_time:
+            return True
+        elif self.completed:
+            self.add_local_measurements(measurements)
+            return False
 
         duplex_pairs = set(self.env.PAIRS_DUPLEX)
         measurement_pairs = set(
-            [meas.receiver.name + meas.transmitter.name for meas in measurements]
+            [
+                meas.receiver.name + meas.transmitter.name
+                for meas in measurements
+                if "rho" in meas.name
+            ]
         )
 
-        # agent_names = set(self.env.AGENT_NAMES)
-        # transmitter_names = set(
-        # np.unique([meas.transmitter.name for meas in measurements])
-        # )
-        # receiver_names = set(np.unique([meas.receiver.name for meas in measurements]))
-
-        # all_measurement_pairs = (len(agent_names - transmitter_names) == 0) and (
-        # len(agent_names - receiver_names) == 0
-        # )
         all_measurement_pairs = len(duplex_pairs - measurement_pairs) == 0
 
         if all_measurement_pairs:
@@ -66,7 +68,7 @@ class LSQ_Filter:
             lsq_result = least_squares(self.lsq_func, x0, bounds=bounds)
 
             if lsq_result.success:
-                completed = True
+                self.completed = True
                 H = lsq_result.jac
                 R = np.diag([measurement.R for measurement in measurements])
                 P = inv(H.T @ inv(R) @ H)
@@ -75,10 +77,7 @@ class LSQ_Filter:
                 self.x = lsq_result.x
                 self.P = P + Q
 
-        if not completed:
-            self.add_local_measurements(measurements)
-
-        return completed
+        self.add_local_measurements(measurements)
 
     def lsq_func(self, x):
         measurements = self.agent.estimator.measurement_queue
@@ -266,9 +265,6 @@ class Unscented_Kalman_Filter:
         x_prediction = self.x.copy()
         P_prediction = self.P.copy()
 
-        # x_true = self.state_log.get_true()
-        # x_prediction = x_true
-
         # Store reference estimate
         x_ref = x_prediction.copy()
         P_ref = P_prediction.copy()
@@ -340,9 +336,6 @@ class Unscented_Kalman_Filter:
                 x_prediction = (x_prediction + K * z_bar).ravel()
                 P_prediction = P_prediction - var_theta * P_yy * (K.T @ K)
 
-                if self.env.now > 100:
-                    set_trace()
-
             else:
                 y = measurement.true
                 K = np.array(P_xy / P_yy, ndmin=2)
@@ -373,7 +366,7 @@ class Unscented_Kalman_Filter:
                     meas.explicit = False
                     meas.implicit = True
 
-                    self.event_triggering_messages.append(meas)
+                self.event_triggering_messages.append(meas)
 
         self.x = x_prediction
         self.P = P_prediction

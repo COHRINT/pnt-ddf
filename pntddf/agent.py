@@ -4,6 +4,7 @@ from bpdb import set_trace
 from pntddf.clock import Clock
 from pntddf.dynamics import Dynamics
 from pntddf.estimator import Estimator
+from pntddf.gps import GPS
 from pntddf.radio import Radio
 from pntddf.sensors import Sensors
 
@@ -29,6 +30,10 @@ class Agent:
 
         # Estimator
         self.estimator = Estimator(self.env, self)
+
+        # GPS
+        if self.config.getboolean("gps"):
+            self.gps = GPS(self.env, self)
 
     def __repr__(self):
         return str(self.name)

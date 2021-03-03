@@ -17,17 +17,13 @@ def rms(data):
     return sqrt(mean(square(data)))
 
 
-def get_state_df(env, agent_name):
-    agent = env.agent_dict[agent_name]
-
+def get_state_df(env, agent):
     df_state = agent.estimator.get_state_log_df()
 
     return df_state
 
 
-def plot_test(env, agent_name):
-    agent = env.agent_dict[agent_name]
-
+def plot_test(env, agent):
     df_state = agent.estimator.get_state_log_df()
 
     df_meas = agent.estimator.get_residuals_log_df()
@@ -53,11 +49,9 @@ def check_NEES_NIS(env):
     return epsilon_x, epsilon_z
 
 
-def plot_b(env, agent_name):
+def plot_b(env, agent):
     if env.NUM_B_STATES == 0:
         return
-
-    agent = env.agent_dict[agent_name]
 
     df = agent.estimator.get_state_log_df()
 
@@ -105,11 +99,9 @@ def plot_b(env, agent_name):
     plt.close()
 
 
-def plot_b_dot(env, agent_name):
+def plot_b_dot(env, agent):
     if env.NUM_B_DOT_STATES == 0:
         return
-
-    agent = env.agent_dict[agent_name]
 
     df = agent.estimator.get_state_log_df()
 
@@ -161,9 +153,7 @@ def plot_b_dot(env, agent_name):
     plt.close()
 
 
-def plot_rover_state_errors(env, agent_name):
-    agent = env.agent_dict[agent_name]
-
+def plot_rover_state_errors(env, agent):
     df = agent.estimator.get_state_log_df()
 
     if df.filter(regex="[xy]_").empty:
@@ -222,10 +212,9 @@ def plot_rover_state_errors(env, agent_name):
     plt.close()
 
 
-def plot_trajectory(env, agent_name, show_beacons=False):
+def plot_trajectory(env, agent, show_beacons=False):
     if env.n_dim != 2:
         return
-    agent = env.agent_dict[agent_name]
 
     df = agent.estimator.get_state_log_df()
 
@@ -278,9 +267,7 @@ def plot_trajectory(env, agent_name, show_beacons=False):
     plt.close()
 
 
-def plot_residuals(env, agent_name):
-    agent = env.agent_dict[agent_name]
-
+def plot_residuals(env, agent):
     df_meas = agent.estimator.get_residuals_log_df()
 
     measurement_names = df_meas.name.unique()
@@ -327,15 +314,17 @@ def plot_residuals(env, agent_name):
         axes[index].set(
             xlabel="$t$ [ s ]",
             ylabel="{} Residuals [ m ]".format(df.latex_name.iloc[0]),
+            ylim=[
+                -5 * df.P_yy_sigma.iloc[-1],
+                5 * df.P_yy_sigma.iloc[-1],
+            ],
         )
 
     plt.savefig("images/residuals_{}.png".format(agent.name))
     plt.close()
 
 
-def plot_time(env, agent_name):
-    agent = env.agent_dict[agent_name]
-
+def plot_time(env, agent):
     if agent.name == "Z":
         return
 
