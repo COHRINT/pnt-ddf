@@ -25,8 +25,11 @@ def get_state_df(env, agent):
 
 def plot_test(env, agent):
     df_state = agent.estimator.get_state_log_df()
-
     df_meas = agent.estimator.get_residuals_log_df()
+
+    if env.centralized:
+        df_state_Z = env.agent_centralized.estimator.get_state_log_df()
+        df_meas_Z = env.agent_centralized.estimator.get_residuals_log_df()
 
     set_trace()
 
@@ -69,31 +72,36 @@ def plot_b(env, agent):
         axes[index].plot(
             df.t,
             df["b_{}_error".format(agent_name)],
+            markersize=7,
             marker=".",
             linestyle="None",
             color="k",
         )
-        axes[index].plot(
+
+        in_bounds = (
+            df["b_{}_error".format(agent_name)].abs()
+            < 2 * df["b_{}_sigma".format(agent_name)]
+        ).sum() / df["b_{}_error".format(agent_name)].shape[0]
+
+        axes[index].fill_between(
             df.t,
             +2 * df["b_{}_sigma".format(agent_name)],
-            linestyle="--",
-            color="C0",
-        )
-        axes[index].plot(
-            df.t,
             -2 * df["b_{}_sigma".format(agent_name)],
-            linestyle="--",
             color="C0",
+            alpha=0.2,
+            label="{:.2f}$\in \pm 2\sigma$".format(in_bounds),
         )
 
         axes[index].set(
             xlabel="$t$ [ sec ]",
             ylabel="$b_{} - \hat{{b_{}}}$ [ m ]".format(agent_name, agent_name),
+            xlim=[0, env.MAX_TIME],
             ylim=[
-                -5 * df["b_{}_sigma".format(agent_name)].iloc[-1],
-                5 * df["b_{}_sigma".format(agent_name)].iloc[-1],
+                -5 * df["b_{}_sigma".format(agent_name)].median(),
+                5 * df["b_{}_sigma".format(agent_name)].median(),
             ],
         )
+        axes[index].legend()
 
     plt.savefig("images/b_error_{}.png".format(agent.name))
     plt.close()
@@ -125,27 +133,31 @@ def plot_b_dot(env, agent):
             linestyle="None",
             color="k",
         )
-        axes[index].plot(
+
+        in_bounds = (
+            df["b_dot_{}_error".format(agent_name)].abs()
+            < 2 * df["b_dot_{}_sigma".format(agent_name)]
+        ).sum() / df["b_dot_{}_error".format(agent_name)].shape[0]
+
+        axes[index].fill_between(
             df.t,
             +2 * df["b_dot_{}_sigma".format(agent_name)],
-            linestyle="--",
-            color="C0",
-        )
-        axes[index].plot(
-            df.t,
             -2 * df["b_dot_{}_sigma".format(agent_name)],
-            linestyle="--",
             color="C0",
+            alpha=0.2,
+            label="{:.2f}$\in \pm 2\sigma$".format(in_bounds),
         )
 
+        axes[index].legend()
         axes[index].set(
             xlabel="$t$ [ sec ]",
             ylabel="$\dot{{b_{}}} - \hat{{\dot{{b_{}}}}}$ [ m / s ]".format(
                 agent_name, agent_name
             ),
+            xlim=[0, env.MAX_TIME],
             ylim=[
-                -5 * df["b_dot_{}_sigma".format(agent_name)].iloc[-1],
-                5 * df["b_dot_{}_sigma".format(agent_name)].iloc[-1],
+                -5 * df["b_dot_{}_sigma".format(agent_name)].median(),
+                5 * df["b_dot_{}_sigma".format(agent_name)].median(),
             ],
         )
 
@@ -184,27 +196,30 @@ def plot_rover_state_errors(env, agent):
                 color="k",
                 marker=".",
             )
-            axes[s, i].plot(
+            in_bounds = (
+                df[state + "_{}_error".format(rover)].abs()
+                < 2 * df[state + "_{}_sigma".format(rover)]
+            ).sum() / df[state + "_{}_error".format(rover)].shape[0]
+
+            axes[s, i].fill_between(
                 df.t,
                 +2 * df[state + "_{}_sigma".format(rover)],
-                linestyle="--",
-                color="C0",
-            )
-            axes[s, i].plot(
-                df.t,
                 -2 * df[state + "_{}_sigma".format(rover)],
-                linestyle="--",
                 color="C0",
+                alpha=0.2,
+                label="{:.2f}$\in \pm 2\sigma$".format(in_bounds),
             )
+            axes[s, i].legend()
             state_latex = state_names_latex[s]
             axes[s, i].set(
                 xlabel="$t$ [ sec ]",
                 ylabel="${} - \hat{{{}}}$ {}".format(
                     state_latex, state_latex, units[s]
                 ),
+                xlim=[0, env.MAX_TIME],
                 ylim=[
-                    -5 * df[state + "_{}_sigma".format(rover)].iloc[-1],
-                    5 * df[state + "_{}_sigma".format(rover)].iloc[-1],
+                    -5 * df[state + "_{}_sigma".format(rover)].median(),
+                    5 * df[state + "_{}_sigma".format(rover)].median(),
                 ],
             )
 
@@ -289,34 +304,28 @@ def plot_residuals(env, agent):
         df = df_meas[df_meas.name == measurement_name]
         if df.empty:
             continue
-        for meas_type, color in zip(
-            ["local", "implicit", "explicit"], ["C0", "C1", "C2"]
-        ):
+        for meas_type, color in zip(["local", "explicit"], ["C0", "C1"]):
             df_ = df[df[meas_type]]
             axes[index].plot(
                 df_.t, df_.r, marker=".", ls="None", color=color, label=meas_type
             )
 
-        axes[index].plot(
+        axes[index].fill_between(
             df.t,
             +2 * df.P_yy_sigma,
-            linestyle="--",
-            color="k",
-        )
-        axes[index].plot(
-            df.t,
             -2 * df.P_yy_sigma,
-            linestyle="--",
-            color="k",
+            color="C0",
+            alpha=0.2,
         )
 
         axes[index].legend()
         axes[index].set(
             xlabel="$t$ [ s ]",
             ylabel="{} Residuals [ m ]".format(df.latex_name.iloc[0]),
+            xlim=[0, env.MAX_TIME],
             ylim=[
-                -5 * df.P_yy_sigma.iloc[-1],
-                5 * df.P_yy_sigma.iloc[-1],
+                -5 * df.P_yy_sigma.median(),
+                5 * df.P_yy_sigma.median(),
             ],
         )
 
@@ -342,25 +351,21 @@ def plot_time(env, agent):
         linestyle="None",
         color="k",
     )
-    ax.plot(
+    ax.fill_between(
         df_state.t,
         +2 * df_state["b_{}_sigma".format(agent.name)] / env.c,
-        linestyle="--",
-        color="C0",
-    )
-    ax.plot(
-        df_state.t,
         -2 * df_state["b_{}_sigma".format(agent.name)] / env.c,
-        linestyle="--",
         color="C0",
+        alpha=0.2,
     )
     ax.set(
         xlabel="$t$ [ s ]",
         ylabel="$t - \hat{t}$ [ s ]",
         title="Agent {} Time Estimate".format(agent.name),
+        xlim=[0, env.MAX_TIME],
         ylim=[
-            -5 * df_state["b_{}_sigma".format(agent.name)].iloc[-1] / env.c,
-            5 * df_state["b_{}_sigma".format(agent.name)].iloc[-1] / env.c,
+            -5 * df_state["b_{}_sigma".format(agent.name)].median() / env.c,
+            5 * df_state["b_{}_sigma".format(agent.name)].median() / env.c,
         ],
     )
 

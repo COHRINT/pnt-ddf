@@ -13,13 +13,12 @@ config_file = "../config/1d.config"
 env = setup_env(config_file)
 
 print("Running Simulation")
-increments = 100
+increments = 1000
 
 with progressbar.ProgressBar(max_value=env.MAX_TIME) as bar:
     for t in np.linspace(env.MAX_TIME / increments, env.MAX_TIME, increments):
         bar.update(np.round(t))
         env.run(until=t)
-
 
 print("Generating Plots")
 plots = [
@@ -31,14 +30,13 @@ plots = [
     plot_time,
 ]
 
-agents_to_plot = env.AGENT_NAMES
-# agents_to_plot = []
+agents_to_plot = env.agents
 if env.centralized:
-    agents_to_plot += ["Z"]
+    agents_to_plot += [env.agent_centralized]
 
 counter = 0
 with progressbar.ProgressBar(max_value=len(agents_to_plot) * len(plots)) as bar:
-    for agent in env.agents:
+    for agent in agents_to_plot:
         for plot in plots:
             plot(env, agent)
             counter += 1

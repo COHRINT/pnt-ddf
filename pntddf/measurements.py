@@ -163,9 +163,9 @@ class Pseudorange(Measurement):
         return copy(self._true_measurement)
 
     def predict(self, x_hat):
-        TRP = self.transmitter.name + self.receiver.name + self.processor.name
+        TR = self.transmitter.name + self.receiver.name
 
-        prediction_func = self.processor.sensors.evaluate_pseudorange[TRP]
+        prediction_func = self.processor.sensors.evaluate_pseudorange[TR]
 
         rho = prediction_func(*x_hat)
 
@@ -185,9 +185,9 @@ class Pseudorange(Measurement):
         return copy(self._R)
 
     def define_R(self):
-        TRP = self.transmitter.name + self.receiver.name + self.processor.name
+        TR = self.transmitter.name + self.receiver.name
 
-        R = self.processor.sensors.evaluate_pseudorange_R[TRP]
+        R = self.processor.sensors.evaluate_pseudorange_R[TR]
 
         self._R = R
         self._sigma = copy(sqrt(R))
@@ -201,7 +201,9 @@ class GPS_Measurement(Measurement):
         self.axis = axis
         self.agent = agent
 
-        self.define_R()
+        self.time_receive = agent.clock.time()
+
+        self.sigma_gps = self.agent.config.getfloat("sigma_gps")
         self.define_true_measurement()
 
     @property
@@ -214,7 +216,6 @@ class GPS_Measurement(Measurement):
 
     def predict(self, x_hat):
         # account for time of prediction compared to time of measurement?
-
         prediction_func = self.processor.sensors.evaluate_gps[self.agent.name]
 
         pos = prediction_func(*x_hat)
@@ -228,7 +229,7 @@ class GPS_Measurement(Measurement):
 
     def define_true_measurement(self):
         measurement = self.env.dynamics.get_true_position(self.agent.name)[self.axis]
-        noise = np.random.normal(0, self._sigma)
+        noise = np.random.normal(0, self.sigma_gps)
         self._true_measurement = measurement + noise
 
         self._name = "gps_{}_{}".format(self.env.dim_names[self.axis], self.agent.name)
@@ -244,6 +245,5 @@ class GPS_Measurement(Measurement):
         return copy(self._R)
 
     def define_R(self):
-        self._sigma = self.agent.config.getfloat("sigma_gps")
-
+        self._sigma = self.sigma_gps
         self._R = self._sigma ** 2

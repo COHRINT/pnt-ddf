@@ -28,5 +28,6 @@ class GPS:
         for d in range(self.env.n_dim):
             gps_measurement = GPS_Measurement(self.env, d, self.agent)
             gps_measurement.local = True
+            gps_measurement.receiver = self.agent
 
             self.agent.estimator.new_measurement(gps_measurement)

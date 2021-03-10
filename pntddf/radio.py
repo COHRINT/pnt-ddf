@@ -79,8 +79,6 @@ class Radio:
         self.message.timestamp_transmit = timestamp_transmit
         pseudorange.timestamp_transmit = timestamp_transmit
 
-        self.agent.estimator.run_filter()
-
         # Measurements
         self.message.measurements = (
             self.agent.estimator.get_event_triggering_measurements()

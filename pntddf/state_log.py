@@ -27,7 +27,7 @@ class State_Log:
 
         self.log_epsilon_x = []
 
-    def log_state(self):
+    def log_state(self, measurement):
         t = self.agent.clock.magic_time()
 
         x = self.agent.estimator.filt.x.copy()
@@ -38,6 +38,7 @@ class State_Log:
         self.log_t.append(t)
         self.log_t_estimate.append(t_estimate)
         self.log_x.append(x)
+        self.log_x_true.append(measurement.x_true)
         self.log_P.append(P)
 
     def get_true(self):
@@ -76,11 +77,6 @@ class State_Log:
 
         self._log_u.append(u)
 
-    def log_true(self):
-        x_true = self.get_true()
-
-        self.log_x_true.append(x_true)
-
     def log_NEES_errors(self):
         # State
         x = self.agent.estimator.filt.x.copy()
@@ -111,7 +107,6 @@ class State_Log:
                 for i in range(self.env.NUM_STATES)
             ]
             + [np.stack(self._log_u)]
-            + [np.array(self.log_epsilon_x)[np.newaxis].T]
         )
 
         state_names = self.env.STATE_NAMES
@@ -131,7 +126,6 @@ class State_Log:
             + ["{}_true".format(var) for var in state_names]
             + ["{}_sigma".format(var) for var in state_names]
             + control_names
-            + ["epsilon_x"]
         )
 
         df = pd.DataFrame(data=data, columns=columns)

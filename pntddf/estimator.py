@@ -12,12 +12,12 @@ class Estimator:
         self.env = env
         self.agent = agent
 
-        self.measurement_queue = []
         self.measurement_log = []
-        self.measurement_queue_centralized = []
 
         # Main Filter
         self.filt = Unscented_Kalman_Filter(self.env, agent)
+
+        self.agent_centralized = self.env.agent_centralized
 
         # Initial filter
         self.lsq_init_completed = False
@@ -26,52 +26,60 @@ class Estimator:
 
     def new_measurement(self, measurement):
         measurement.processor = self.agent
+        if measurement.local:
+            measurement.time_process_local = self.agent.clock.time()
+            measurement.x_true = self.filt.state_log.get_true()
+        else:
+            measurement.time_process_external = self.agent.clock.time()
 
-        self.measurement_queue.append(measurement)
-        self.measurement_queue_centralized.append(measurement)
+        self.run_filter(measurement)
+        self.run_centralized_filter(copy(measurement))
 
-    def run_filter(self):
-        self.set_time()
+    def run_filter(self, measurement):
+        self.set_time(measurement)
 
         if self.env.lsq_init and not self.lsq_init_completed:
-            completed = self.lsq_filter.estimate()
+            completed = self.lsq_filter.estimate(measurement)
             self.lsq_init_completed = completed
-            self.step()
+            self.step(measurement)
 
             if completed:
                 self.filt.define_initial_state(x=self.lsq_filter.x, P=self.lsq_filter.P)
 
             return
 
-        self.prediction()
+        self.prediction(measurement)
 
-        self.local_update()
+        self.local_update(measurement)
 
         # self.fusion_update()
 
-        self.step()
+        self.step(measurement)
+        self.log_measurement(measurement)
 
-    def set_time(self):
-        self.filt.set_time()
+    def run_centralized_filter(self, measurement):
+        self.agent_centralized.estimator.run_filter(measurement)
 
-    def prediction(self):
-        self.filt.predict_self()
+    def set_time(self, measurement):
+        self.filt.set_time(measurement)
+
+    def prediction(self, measurement):
+        self.filt.predict_self(measurement)
 
         # for message in self.message_queue:
         # self.filt.predict_message(message)
 
-    def local_update(self):
-        self.filt.local_update()
+    def local_update(self, measurement):
+        self.filt.local_update(measurement)
 
     def fusion_update(self):
         self.filt.fusion_update()
 
-    def step(self):
-        if self.lsq_init_completed:
-            for measurement in self.measurement_queue:
-                self.measurement_log.append(measurement)
-        self.measurement_queue = []
-        self.filt.step()
+    def log_measurement(self, measurement):
+        self.measurement_log.append(measurement)
+
+    def step(self, measurement):
+        self.filt.step(measurement)
 
     def get_state_estimate(self):
         x = self.agent.estimator.filt.x.copy()
