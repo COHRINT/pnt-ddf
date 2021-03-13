@@ -7,8 +7,8 @@ from pntddf.results import (plot_b, plot_b_dot, plot_residuals,
                             plot_rover_state_errors, plot_test, plot_time,
                             plot_trajectory)
 
-config_file = "../config/sim.config"
-# config_file = "../config/1d.config"
+# config_file = "../config/sim.config"
+config_file = "../config/1d.config"
 
 env = setup_env(config_file)
 

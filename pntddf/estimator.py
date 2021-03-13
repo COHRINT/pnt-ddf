@@ -29,11 +29,11 @@ class Estimator:
         if measurement.local:
             measurement.time_process_local = self.agent.clock.time()
             measurement.x_true = self.filt.state_log.get_true()
+            self.run_centralized_filter(copy(measurement))
         else:
             measurement.time_process_external = self.agent.clock.time()
 
         self.run_filter(measurement)
-        self.run_centralized_filter(copy(measurement))
 
     def run_filter(self, measurement):
         self.set_time(measurement)
