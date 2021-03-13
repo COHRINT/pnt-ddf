@@ -101,7 +101,7 @@ class Rover:
             [[np.eye(self.env.n_dim), np.zeros([self.env.n_dim, self.env.n_dim])]],
         )
 
-        lambda_desired = np.linspace(-1, -2, self.env.n_dim * 2) * 1e-1
+        lambda_desired = np.linspace(-1, -2, self.env.n_dim * 2) * 1e-2
         self.K = place_poles(A, B, lambda_desired).gain_matrix
         self.L = inv(C @ inv(-A + B @ self.K) @ B)
 
@@ -117,7 +117,7 @@ class Rover:
         self.G_fxn = lambdify(Delta_t, self.G)
 
     def u(self, t, x_hat):
-        initial_wait = 120.0
+        initial_wait = 5.0
 
         if t < initial_wait:
             return np.zeros(self.env.n_dim)
