@@ -1,16 +1,24 @@
+import re
+
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 from bpdb import set_trace
+from matplotlib.patches import Ellipse
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from numpy import abs, mean, sqrt, square
+from scipy.stats import chi2, norm
 
-plt.style.use("seaborn-talk")
+# plt.style.use("seaborn-paper")
+sns.set_context("paper", font_scale=2.0)
+
 
 matplotlib.rcParams["figure.figsize"] = [10.0, 10.0]
 matplotlib.rcParams["figure.constrained_layout.use"] = True
 matplotlib.rcParams["agg.path.chunksize"] = 10000
+plt.rcParams["axes.grid"] = True
 
 
 def rms(data):
@@ -88,7 +96,7 @@ def plot_b(env, agent):
             +2 * df["b_{}_sigma".format(agent_name)],
             -2 * df["b_{}_sigma".format(agent_name)],
             color="C0",
-            alpha=0.2,
+            alpha=0.4,
             label="{:.2f}$\in \pm 2\sigma$".format(in_bounds),
         )
 
@@ -97,11 +105,11 @@ def plot_b(env, agent):
             ylabel="$b_{} - \hat{{b_{}}}$ [ m ]".format(agent_name, agent_name),
             xlim=[0, env.MAX_TIME],
             ylim=[
-                -5 * df["b_{}_sigma".format(agent_name)].median(),
-                5 * df["b_{}_sigma".format(agent_name)].median(),
+                -10 * df["b_{}_sigma".format(agent_name)].median(),
+                10 * df["b_{}_sigma".format(agent_name)].median(),
             ],
         )
-        axes[index].legend()
+        axes[index].legend(framealpha=1.0)
 
     plt.savefig("images/b_error_{}.png".format(agent.name))
     plt.close()
@@ -129,6 +137,7 @@ def plot_b_dot(env, agent):
         axes[index].plot(
             df.t,
             df["b_dot_{}_error".format(agent_name)],
+            markersize=7,
             marker=".",
             linestyle="None",
             color="k",
@@ -144,11 +153,11 @@ def plot_b_dot(env, agent):
             +2 * df["b_dot_{}_sigma".format(agent_name)],
             -2 * df["b_dot_{}_sigma".format(agent_name)],
             color="C0",
-            alpha=0.2,
+            alpha=0.4,
             label="{:.2f}$\in \pm 2\sigma$".format(in_bounds),
         )
 
-        axes[index].legend()
+        axes[index].legend(framealpha=1.0)
         axes[index].set(
             xlabel="$t$ [ sec ]",
             ylabel="$\dot{{b_{}}} - \hat{{\dot{{b_{}}}}}$ [ m / s ]".format(
@@ -156,8 +165,8 @@ def plot_b_dot(env, agent):
             ),
             xlim=[0, env.MAX_TIME],
             ylim=[
-                -5 * df["b_dot_{}_sigma".format(agent_name)].median(),
-                5 * df["b_dot_{}_sigma".format(agent_name)].median(),
+                -7 * df["b_dot_{}_sigma".format(agent_name)].median(),
+                7 * df["b_dot_{}_sigma".format(agent_name)].median(),
             ],
         )
 
@@ -206,10 +215,10 @@ def plot_rover_state_errors(env, agent):
                 +2 * df[state + "_{}_sigma".format(rover)],
                 -2 * df[state + "_{}_sigma".format(rover)],
                 color="C0",
-                alpha=0.2,
+                alpha=0.4,
                 label="{:.2f}$\in \pm 2\sigma$".format(in_bounds),
             )
-            axes[s, i].legend()
+            axes[s, i].legend(framealpha=1.0)
             state_latex = state_names_latex[s]
             axes[s, i].set(
                 xlabel="$t$ [ sec ]",
@@ -218,8 +227,8 @@ def plot_rover_state_errors(env, agent):
                 ),
                 xlim=[0, env.MAX_TIME],
                 ylim=[
-                    -5 * df[state + "_{}_sigma".format(rover)].median(),
-                    5 * df[state + "_{}_sigma".format(rover)].median(),
+                    -7 * df[state + "_{}_sigma".format(rover)].median(),
+                    7 * df[state + "_{}_sigma".format(rover)].median(),
                 ],
             )
 
@@ -297,7 +306,13 @@ def plot_residuals(env, agent):
     axes = axes.ravel()
 
     fig.suptitle(
-        "Agent {} Measurement Residuals".format(agent.name), fontsize="xx-large"
+        "Agent {} Measurement Residuals, {}E {}I {}L".format(
+            agent.name,
+            df_meas.explicit.sum(),
+            df_meas.implicit.sum(),
+            df_meas.local.sum(),
+        ),
+        fontsize="xx-large",
     )
 
     for index, measurement_name in enumerate(measurement_names):
@@ -315,7 +330,7 @@ def plot_residuals(env, agent):
             +2 * df.P_yy_sigma,
             -2 * df.P_yy_sigma,
             color="C0",
-            alpha=0.2,
+            alpha=0.4,
         )
 
         axes[index].legend()
@@ -356,7 +371,7 @@ def plot_time(env, agent):
         +2 * df_state["b_{}_sigma".format(agent.name)] / env.c,
         -2 * df_state["b_{}_sigma".format(agent.name)] / env.c,
         color="C0",
-        alpha=0.2,
+        alpha=0.4,
     )
     ax.set(
         xlabel="$t$ [ s ]",
@@ -371,3 +386,57 @@ def plot_time(env, agent):
 
     plt.savefig("images/time_{}.png".format(agent.name))
     plt.close()
+
+
+def plot_covariance_ellipse(ax, x, P, color):
+    sigma = 2
+    z = norm.cdf(sigma) - norm.cdf(-sigma)
+    s = chi2.ppf(z, 2)
+
+    w, v = np.linalg.eig(P)
+    idx = np.argsort(w)
+    w = w[idx]
+    v = v[:, idx]
+    a = 2 * sqrt(s * w[0])
+    b = 2 * sqrt(s * w[1])
+    alpha = np.arctan2(*v[:, 0])
+
+    el = Ellipse(x, a, b, angle=np.degrees(alpha), alpha=0.5, color=color)
+    ax.add_artist(el)
+
+
+def plot_ellipses(xP_data, **kwargs):
+    fig, ax = plt.subplots(figsize=(6, 6), constrained_layout=True)
+
+    for i, xP in enumerate(xP_data):
+        x, P, label = xP
+        c = "C{}".format(i)
+        ax.plot(x[0], x[1], marker=".", ls="None", color=c, label=label)
+        plot_covariance_ellipse(ax, x, P, c)
+
+    ax.legend()
+    x_min = min([x[0] - 3 * np.sqrt(P[0, 0]) for x, P, _ in xP_data])
+    x_max = max([x[0] + 3 * np.sqrt(P[0, 0]) for x, P, _ in xP_data])
+    y_min = min([x[1] - 3 * np.sqrt(P[1, 1]) for x, P, _ in xP_data])
+    y_max = max([x[1] + 3 * np.sqrt(P[1, 1]) for x, P, _ in xP_data])
+    ax.set(xlim=[x_min, x_max], ylim=[y_min, y_max], **kwargs)
+    plt.show()
+
+
+def comm_savings(env, agents):
+    dfs_meas = []
+    for agent in agents:
+        df_meas = agent.estimator.get_residuals_log_df()
+        dfs_meas.append(df_meas)
+
+    df_meas = pd.concat(dfs_meas)
+    for agent in agents:
+        r = re.compile(r"rho_.{}".format(agent.name))
+        df_subset = df_meas[df_meas.name.apply(lambda s: bool(r.match(s)))]
+
+        L = df_subset.local.sum()
+        I = df_subset.implicit.sum()
+        E = df_subset.explicit.sum()
+
+        savings_kb = int(I * 4 / 1000)
+        print("{} & {} & {} & {} & {} \\\\".format(agent.name, L, I, E, savings_kb))

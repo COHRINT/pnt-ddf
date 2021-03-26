@@ -124,6 +124,9 @@ class Rover:
 
         u = -self.K @ x_hat + self.L @ self.waypoint[: self.env.n_dim]
 
+        # max_u = 0.01
+        # u = np.array([np.sign(ui) * min(abs(ui), max_u) for ui in u])
+
         return u
 
     def update_state(self):

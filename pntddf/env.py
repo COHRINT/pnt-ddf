@@ -42,7 +42,13 @@ def setup_env(config_file, ros=False):
 
     # ET config
     env.et_config = config["ET"]
+    env.et = env.et_config.getboolean("ET")
     env.delta = env.et_config.getfloat("delta")
+
+    # CI config
+    env.ci_config = config["CI"]
+    env.ci = env.ci_config.getboolean("CI")
+    env.ci_rate = env.ci_config.getint("ci_rate")
 
     # Initialize with least squares?
     env.lsq_init = config.getboolean("ENV", "lsq_init")

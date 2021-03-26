@@ -169,7 +169,7 @@ class Pseudorange(Measurement):
 
         rho = prediction_func(*x_hat)
 
-        return rho
+        return np.array(rho)
 
     def define_true_measurement(self):
         self._true_measurement = c * (self.timestamp_receive - self.timestamp_transmit)
@@ -183,6 +183,11 @@ class Pseudorange(Measurement):
     def R(self):
         self.define_R()
         return copy(self._R)
+
+    @property
+    def sigma(self):
+        self.define_R()
+        return copy(self._sigma)
 
     def define_R(self):
         TR = self.transmitter.name + self.receiver.name
@@ -243,6 +248,11 @@ class GPS_Measurement(Measurement):
     def R(self):
         self.define_R()
         return copy(self._R)
+
+    @property
+    def sigma(self):
+        self.define_R()
+        return copy(self._sigma)
 
     def define_R(self):
         self._sigma = self.sigma_gps

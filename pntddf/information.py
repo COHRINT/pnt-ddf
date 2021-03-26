@@ -27,7 +27,10 @@ class Information:
         self.y = y
         self.Y = Y
 
-        self.time = np.nan
+        self.transmitter = None
+        self.timestamp_transmit = None
+        self.receiver = None
+        self.timestamp_receive = None
 
     @property
     def Y(self):
@@ -36,6 +39,14 @@ class Information:
     @Y.setter
     def Y(self, Y):
         self._Y = Y
+
+    @property
+    def P(self):
+        return self.invert()[1]
+
+    @property
+    def x(self):
+        return self.invert()[0]
 
     def invert(self):
         return invert(self.y, self.Y)
@@ -62,7 +73,10 @@ class Information:
 
     def __copy__(self):
         new = type(self)(self.y.copy(), self.Y.copy())
-        new.time = copy(self.time)
+        new.transmitter = self.transmitter
+        new.timestamp_transmit = self.timestamp_transmit
+        new.receiver = self.receiver
+        new.timestamp_receive = self.timestamp_receive
 
         return new
 

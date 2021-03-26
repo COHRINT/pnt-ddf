@@ -18,6 +18,10 @@ class Radio:
 
         self.cycle_number_previous = -1
 
+        self.message_index = 1
+
+        self.ci_rate = self.env.ci_rate
+
         # Amount of time to wait before transmitting
         if "wait" in self.agent.config.keys():
             self.wait = self.agent.config.getfloat("wait")
@@ -85,7 +89,14 @@ class Radio:
         )
 
         # Local Info
-        # self.message.local_info = self.agent.estimator.get_local_info()
+        if ((self.message_index % self.ci_rate) == 0) and self.env.ci:
+            local_info = self.agent.estimator.get_local_info()
+            if local_info:
+                local_info.transmitter = self.agent
+                local_info.timestamp_transmit = timestamp_transmit
+                self.message.local_info = local_info
+
+        self.message_index += 1
 
     def transmit_message(self):
         agent_recipients = [
@@ -114,10 +125,16 @@ class Radio:
 
         # Pass the measurements to estimator
         self.agent.estimator.new_measurement(message.pseudorange)
+
         for measurement in message.measurements:
             measurement = copy(measurement)
             measurement.time_receive = timestamp_receive
             self.agent.estimator.new_measurement(measurement)
+
+        if message.local_info:
+            message.local_info.receiver = self.agent
+            message.local_info.timestamp_receive = timestamp_receive
+            self.agent.estimator.new_info(message.local_info)
 
 
 class Transmission:

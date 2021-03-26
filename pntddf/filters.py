@@ -7,10 +7,13 @@ from numpy import sqrt
 from numpy.linalg import cholesky, inv, norm
 from scipy.linalg import block_diag
 from scipy.optimize import least_squares
+from scipy.spatial.distance import mahalanobis
 from scipy.special import erf
+from scipy.stats import multivariate_normal
 
 from pntddf.covariance_intersection import covariance_intersection
 from pntddf.information import Information, invert
+from pntddf.results import plot_ellipses
 from pntddf.state_log import State_Log
 
 np.set_printoptions(suppress=True)
@@ -58,13 +61,13 @@ class LSQ_Filter:
             x0 = self.env.x0.copy()
             lower_bounds = np.array(
                 [
-                    -1e-3 if re.match(r"[xyz]_dot", str(state)) else -np.inf
+                    -1e-6 if re.match(r"[xyz]_dot", str(state)) else -np.inf
                     for state in self.env.dynamics.x_vec
                 ]
             )
             upper_bounds = np.array(
                 [
-                    1e-3 if re.match(r"[xyz]_dot", str(state)) else np.inf
+                    1e-6 if re.match(r"[xyz]_dot", str(state)) else np.inf
                     for state in self.env.dynamics.x_vec
                 ]
             )
@@ -78,7 +81,7 @@ class LSQ_Filter:
                 R = np.diag([measurement.R for measurement in measurements])
                 P = inv(H.T @ inv(R) @ H)
                 time_delta = self.env.TRANSMISSION_WINDOW * self.env.NUM_AGENTS
-                Q = self.agent.estimator.filt.generate_Q(time_delta)
+                Q = self.agent.estimator.filt.generate_Q(time_delta, np.array([0]))
                 self.x = x
                 self.P = P + Q
 
@@ -93,7 +96,7 @@ class LSQ_Filter:
             x_back_prediction = self.env.dynamics.step_x(x, tau, 0)
 
             r = measurement.true - measurement.predict(x_back_prediction)
-            residuals.append(r)
+            residuals.append(r / measurement.sigma)
 
         return np.array(residuals)
 
@@ -110,20 +113,6 @@ class LSQ_Filter:
             tau = measurement.time_process_local - Delta_R + Delta_P - t
 
         return tau
-
-    # def get_R(self, measurement, x):
-    #     tau = self.get_tau(measurement, x)
-
-    #     sigma_clock_R = measurement.receiver.clock.sigma_clock_process
-    #     sigma_clock_T = measurement.transmitter.clock.sigma_clock_process
-
-    #     R_tau = np.abs(
-    #         tau * (sigma_clock_T ** 2 + sigma_clock_R ** 2) * self.env.c ** 2
-    #     )
-
-    #     R = measurement.R + R_tau
-
-    #     return R
 
     def add_measurement(self, measurement):
         self.measurements.append(copy(measurement))
@@ -154,6 +143,8 @@ class Unscented_Kalman_Filter:
         self.clock_estimate_dict = self.env.dynamics.get_clock_estimate_function()
 
         self.state_log = State_Log(env, agent)
+
+        self.measurement = None
 
         self.define_initial_state()
         self.define_event_triggering_measurements()
@@ -192,7 +183,7 @@ class Unscented_Kalman_Filter:
         self.N = N
         self.lamb = lamb
 
-    def predict_self(self, measurement):
+    def predict_self(self):
         x_hat = self.x.copy()
         P = self.P.copy()
 
@@ -203,15 +194,19 @@ class Unscented_Kalman_Filter:
         x_prediction = self.env.dynamics.step_x(x_hat, tau, t_estimate)
         P_prediction = self.env.dynamics.step_P(P, tau)
 
-        tau_Q = self.get_tau_Q(measurement)
-        Q = self.generate_Q(time_delta=tau_Q)
+        tau_Q = self.get_tau_Q()
+        u = self.env.dynamics.u(t_estimate, x_hat)
+        Q = self.generate_Q(time_delta=tau_Q, u=u)
 
         P_prediction += Q
 
         self.x = x_prediction
         self.P = P_prediction
 
-    def generate_Q(self, time_delta):
+    def predict_info(self, info):
+        pass
+
+    def generate_Q(self, time_delta, u):
         Q_clock = block_diag(
             *[
                 np.array(
@@ -226,6 +221,7 @@ class Unscented_Kalman_Filter:
             ]
         )
 
+        Q_target_scale = self.Q_sigma_target ** 2 + 50 * np.linalg.norm(u)
         Q_target = block_diag(
             *[
                 np.block(
@@ -240,7 +236,7 @@ class Unscented_Kalman_Filter:
                         ],
                     ]
                 )
-                * self.Q_sigma_target ** 2
+                * Q_target_scale
                 for rover_name in self.env.ROVER_NAMES
             ]
         )
@@ -270,6 +266,7 @@ class Unscented_Kalman_Filter:
         return sigma_points
 
     def local_update(self, measurement):
+        self.measurement = measurement
         x_prediction = self.x.copy()
         P_prediction = self.P.copy()
 
@@ -342,7 +339,7 @@ class Unscented_Kalman_Filter:
             x_hat = (x_prediction + K * r).ravel()
             P_hat = P_prediction - P_yy * (K.T @ K)
 
-        if measurement.local:
+        if measurement.local and self.env.et:
             meas = copy(measurement)
             meas.local = False
 
@@ -359,21 +356,124 @@ class Unscented_Kalman_Filter:
         self.x = x_hat
         self.P = P_hat
 
-    def step(self, measurement):
+    def local_update_info(self, info, measurement):
+        if measurement is None:
+            info.x_updated = info.x
+            info.P_updated = info.P
+            return
+
+        x_prediction = info.x.copy()
+        P_prediction = info.P.copy()
+
+        chi = self.generate_sigma_points(x_prediction, P_prediction)
+
+        upsilon = [measurement.predict(chi_i) for chi_i in chi]
+
+        y_prediction = sum([w * upsilon_i for w, upsilon_i in zip(self.w_m, upsilon)])
+
+        P_xy = sum(
+            [
+                w
+                * (chi_i - x_prediction)[np.newaxis].T
+                @ (upsilon_i - y_prediction)[np.newaxis]
+                for w, chi_i, upsilon_i in zip(self.w_c, chi, upsilon)
+            ]
+        )
+
+        R = measurement.R
+
+        P_yy = (
+            sum(
+                [
+                    w
+                    * (upsilon_i - y_prediction)[np.newaxis].T
+                    @ (upsilon_i - y_prediction)[np.newaxis]
+                    for w, upsilon_i in zip(self.w_c, upsilon)
+                ]
+            )
+            + R
+        )
+
+        y = measurement.true
+        K = np.array(P_xy / P_yy, ndmin=2)
+
+        r = y - y_prediction
+        x_hat = (x_prediction + K * r).ravel()
+        P_hat = P_prediction - P_yy * (K.T @ K)
+
+        info.x_updated = x_hat
+        info.P_updated = P_hat
+
+    def fusion_update(self, info):
+        # local
+        local_info = self.get_local_info()
+
+        # received info
+        self.local_update_info(info, self.measurement)
+        info.Y = inv(info.P_updated)
+        info.y = info.Y @ info.x_updated
+
+        # fusion
+        information_set = [local_info, info]
+        fused_info = covariance_intersection(information_set, fast=True)
+
+        x_fused, P_fused = invert(fused_info.y, fused_info.Y)
+
+        self.x = x_fused
+        # ensure symmetric
+        Pc = cholesky(P_fused)
+        P_fused = Pc @ Pc.T
+        self.P = P_fused
+
+        if self.agent.name == "A":
+            indices = [0, 2]
+            x_true = self.agent.estimator.filt.state_log.get_true()
+            plot_ellipses(
+                [
+                    [
+                        local_info.x[indices],
+                        local_info.P[np.ix_(indices, indices)],
+                        "local {}".format(self.agent.name),
+                    ],
+                    [
+                        info.x[indices],
+                        info.P[np.ix_(indices, indices)],
+                        "info {}".format(info.transmitter.name),
+                    ],
+                    [x_fused[indices], P_fused[np.ix_(indices, indices)], "fused"],
+                    [x_true[indices], P_fused[np.ix_(indices, indices)] / 100, "true"],
+                ],
+                xlabel="$b_T$",
+                ylabel="$x_T$",
+            )
+
+    def log(self, measurement):
         self.state_log.log_state(measurement)
         self.state_log.log_u()
 
+    def step(self):
         self.update_t()
 
-    def set_time(self, measurement):
+    def set_time_from_measurement(self, measurement):
         time_process_local = measurement.time_process_local
 
-        if measurement.local:
+        if self.agent.name == "Z":
+            self.t_kp1 = self.agent.clock.magic_time()
+        elif measurement.local:
             self.t_kp1 = time_process_local
         else:
             Delta_R, _ = self.get_clock_estimate(measurement.receiver.name)
             Delta_P, _ = self.get_clock_estimate(measurement.processor.name)
             self.t_kp1 = time_process_local - Delta_R + Delta_P
+
+        self.t_Q_prev = self.t_Q
+        self.t_Q = max(self.t_Q, self.t_kp1)
+
+    def set_time_from_info(self, info):
+        Delta_T, _ = self.get_clock_estimate(info.transmitter.name)
+        Delta_R, _ = self.get_clock_estimate(info.receiver.name)
+
+        self.t_kp1 = info.timestamp_transmit - Delta_T + Delta_R
 
         self.t_Q_prev = self.t_Q
         self.t_Q = max(self.t_Q, self.t_kp1)
@@ -386,15 +486,17 @@ class Unscented_Kalman_Filter:
 
         return tau
 
-    def get_tau_Q(self, measurement):
+    def get_tau_Q(self):
         tau_Q = self.t_Q - self.t_Q_prev
 
         return tau_Q
 
-    # def get_local_info(self):
-    # local_info_copy = copy(self.local_info)
-    # local_info_copy.time = copy(self.t_kp1)
-    # return local_info_copy
+    def get_local_info(self):
+        Y = inv(self.P)
+        y = Y @ self.x
+        local_info = Information(y, Y)
+
+        return local_info
 
     def get_event_triggering_measurements(self):
         et_messages = copy(self.event_triggering_messages)
