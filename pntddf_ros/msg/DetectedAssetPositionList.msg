@@ -1,0 +1,1 @@
+DetectedAssetPosition[] assetPositions
