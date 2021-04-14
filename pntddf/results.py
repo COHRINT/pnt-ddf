@@ -4,21 +4,13 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 from bpdb import set_trace
 from matplotlib.patches import Ellipse
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from numpy import abs, mean, sqrt, square
 from scipy.stats import chi2, norm
 
-# plt.style.use("seaborn-paper")
-sns.set_context("paper", font_scale=2.0)
-
-
-matplotlib.rcParams["figure.figsize"] = [10.0, 10.0]
-matplotlib.rcParams["figure.constrained_layout.use"] = True
 matplotlib.rcParams["agg.path.chunksize"] = 10000
-plt.rcParams["axes.grid"] = True
 
 
 def rms(data):
@@ -60,11 +52,9 @@ def check_NEES_NIS(env):
     return epsilon_x, epsilon_z
 
 
-def plot_b(env, agent):
+def plot_b(env, agent, df, _):
     if env.NUM_B_STATES == 0:
         return
-
-    df = agent.estimator.get_state_log_df()
 
     fig, axes = plt.subplots(
         env.NUM_B_STATES,
@@ -115,11 +105,9 @@ def plot_b(env, agent):
     plt.close()
 
 
-def plot_b_dot(env, agent):
+def plot_b_dot(env, agent, df, _):
     if env.NUM_B_DOT_STATES == 0:
         return
-
-    df = agent.estimator.get_state_log_df()
 
     fig, axes = plt.subplots(
         env.NUM_B_DOT_STATES,
@@ -174,9 +162,7 @@ def plot_b_dot(env, agent):
     plt.close()
 
 
-def plot_rover_state_errors(env, agent):
-    df = agent.estimator.get_state_log_df()
-
+def plot_rover_state_errors(env, agent, df, _):
     if df.filter(regex="[xy]_").empty:
         return
 
@@ -188,15 +174,20 @@ def plot_rover_state_errors(env, agent):
         squeeze=False,
     )
 
-    fig.suptitle(
-        "Agent {} Rover State Estimates".format(agent.name), fontsize="xx-large"
-    )
+    title_template = "Agent {} Rover States $\delta={} [ m ]$"
+    title = title_template.format(agent.name, int(env.delta))
+    fig.suptitle(title, fontsize="xx-large")
 
     units = ["[ m ]"] * env.n_dim + ["[ m / s ]"] * env.n_dim
 
     for i, rover in enumerate(env.ROVER_NAMES):
         state_names_latex = ["{}_{}".format(v, rover) for v in env.dim_names]
         state_names_latex += ["\dot{{{}}}_{}".format(v, rover) for v in env.dim_names]
+
+        init_time = env.NUM_AGENTS * env.TRANSMISSION_WINDOW * 3
+        rmse = RMSE(df[df.t > init_time].filter(regex="[xyz]_{}_error".format(rover)))
+        axes[0, i].set(title="Position RMSE: {:.2f} [ m ]".format(rmse))
+
         for s, state in enumerate(env.ROVER_STATES):
             axes[s, i].plot(
                 df.t,
@@ -236,11 +227,13 @@ def plot_rover_state_errors(env, agent):
     plt.close()
 
 
-def plot_trajectory(env, agent, show_beacons=False):
+def RMSE(df):
+    return np.sqrt((df ** 2).sum(axis=1).mean())
+
+
+def plot_trajectory(env, agent, df, _, show_beacons=False):
     if env.n_dim != 2:
         return
-
-    df = agent.estimator.get_state_log_df()
 
     if df.filter(regex="[xy]_").empty:
         return
@@ -291,9 +284,7 @@ def plot_trajectory(env, agent, show_beacons=False):
     plt.close()
 
 
-def plot_residuals(env, agent):
-    df_meas = agent.estimator.get_residuals_log_df()
-
+def plot_residuals(env, agent, _, df_meas):
     measurement_names = df_meas.name.unique()
     measurement_names.sort()
 
@@ -348,11 +339,9 @@ def plot_residuals(env, agent):
     plt.close()
 
 
-def plot_time(env, agent):
+def plot_time(env, agent, df_state, _):
     if agent.name == "Z":
         return
-
-    df_state = agent.estimator.get_state_log_df()
 
     if df_state.filter(regex="b_{}_sigma".format(agent.name)).empty:
         return

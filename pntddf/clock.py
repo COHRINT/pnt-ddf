@@ -34,6 +34,7 @@ class Clock:
         self._Delta_dot = self.alpha - 1
 
         self.q = np.array([self.beta, self.alpha])
+        # self.q = np.array([self.beta, self.alpha, 0])
 
     def define_noise(self):
         if self.agent.config.getboolean("perfect_clock"):
@@ -50,14 +51,12 @@ class Clock:
         T = self.env.now - self.time_previous
         self.time_previous = self.env.now
 
-        self.q = self.F(T) @ self.q + np.random.multivariate_normal(
-            0 * self.q, self.Q(T)
-        )
+        w = np.random.multivariate_normal(0 * self.q, self.Q(T))
+        q_new = self.F(T) @ self.q + w
+        self.q = q_new
 
-        self._Delta = self.q[0] - self.env.now
-        self._Delta_dot = self.q[1] - 1
-
-        self._alpha = self.q[1]
+        self._Delta = self.q[0].copy() - self.env.now
+        self._Delta_dot = self.q[1].copy() - 1
 
     def time(self):
         self.update_time()
@@ -130,6 +129,13 @@ class Clock:
                 [0, 0],
             ]
         )
+        # A = np.array(
+        # [
+        # [0, 1, 0],
+        # [0, 0, 1],
+        # [0, 0, 0],
+        # ]
+        # )
 
         Q = np.array(
             [
@@ -137,15 +143,38 @@ class Clock:
                 [0, self.sigma_clock_process ** 2],
             ]
         )
+        # Q = np.array(
+        # [
+        # [0, 0, 0],
+        # [0, 0, 0],
+        # [0, 0, self.sigma_clock_process ** 2],
+        # ]
+        # )
 
         T = symbols("T", real=True)
+        # sigma_w = symbols("sigma_w", real=True)
+        # Qw = np.array(
+        # [
+        # [0, 0, 0],
+        # [0, 0, 0],
+        # [0, 0, sigma_w ** 2],
+        # ]
+        # )
 
         Z = Matrix(np.block([[-A, Q], [np.zeros([2, 2]), A.T]])) * T
+        # Z = Matrix(np.block([[-A, Q], [np.zeros([3, 3]), A.T]])) * T
+        # Zw = Matrix(np.block([[-A, Qw], [np.zeros([3, 3]), A.T]])) * T
 
         eZ = exp(Z)
+        # eZw = exp(Zw)
 
         F = eZ[2:, 2:].T
         Q_d = F @ eZ[:2, 2:]
+        # F = eZ[3:, 3:].T
+        # Q_d = F @ eZ[:3, 3:]
+        # Q_dw = F @ eZw[:3, 3:]
 
         self.F = lambdify(T, F)
         self.Q = lambdify(T, Q_d)
+        set_trace()
+        # self.Qw = lambdify([T, sigma_w], Q_dw)

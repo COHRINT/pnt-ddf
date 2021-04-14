@@ -13,7 +13,6 @@ from scipy.stats import multivariate_normal
 
 from pntddf.covariance_intersection import covariance_intersection
 from pntddf.information import Information, invert
-from pntddf.results import plot_ellipses
 from pntddf.state_log import State_Log
 
 np.set_printoptions(suppress=True)
@@ -57,7 +56,7 @@ class LSQ_Filter:
 
         all_measurement_pairs = len(duplex_pairs - measurement_pairs) == 0
 
-        if all_measurement_pairs:
+        if all_measurement_pairs and self.agent.clock.time() > self.broadcast_time:
             x0 = self.env.x0.copy()
             lower_bounds = np.array(
                 [
@@ -195,7 +194,7 @@ class Unscented_Kalman_Filter:
         P_prediction = self.env.dynamics.step_P(P, tau)
 
         tau_Q = self.get_tau_Q()
-        u = self.env.dynamics.u(t_estimate, x_hat)
+        u = self.env.dynamics.u(t_estimate)
         Q = self.generate_Q(time_delta=tau_Q, u=u)
 
         P_prediction += Q
@@ -215,13 +214,13 @@ class Unscented_Kalman_Filter:
                         [1 / 2 * time_delta ** 2, 1 / 1 * time_delta ** 1],
                     ]
                 )
-                * self.env.agent_dict[agent_name].clock.sigma_clock_process ** 2
+                * self.Q_sigma_clock ** 2
                 * self.env.c ** 2
                 for agent_name in self.env.agent_clocks_to_be_estimated
             ]
         )
 
-        Q_target_scale = self.Q_sigma_target ** 2 + 50 * np.linalg.norm(u)
+        Q_target_scale = self.Q_sigma_target ** 2
         Q_target = block_diag(
             *[
                 np.block(

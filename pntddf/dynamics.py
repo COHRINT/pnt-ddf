@@ -15,7 +15,7 @@ class Rover:
         self.agent_config = self.env.agent_configs[agent.name]
 
         self.setup_x()
-        self.setup_waypoints()
+        self.setup_controls()
 
         self.setup_symbols()
         self.setup_dynamics()
@@ -38,26 +38,9 @@ class Rover:
                 [self.agent_config.getfloat(v + "_0") for v in self.env.ROVER_STATES]
             )
 
-    def setup_waypoints(self):
-        waypoints_str = self.agent_config.get("waypoints")
-
-        waypoints = list(
-            map(
-                lambda x: np.array(
-                    list(map(float, x.replace(")", "").replace("(", "").split(",")))
-                ),
-                waypoints_str.split("\n"),
-            )
-        )
-
-        self.waypoints = waypoints
-        self.visited = [False for i in range(len(waypoints))]
-
-        self.waypoint_index = 0
-        self.waypoint = self.waypoints[self.waypoint_index]
-
-        self.waypoint_threshold = 1.0
-        self.velocity_threshold = 1.0
+    def setup_controls(self):
+        self.u_x_mult = self.agent.config.getfloat("u_x_mult")
+        self.u_y_mult = self.agent.config.getfloat("u_y_mult")
 
     def setup_symbols(self):
         self.x_vec = []
@@ -116,47 +99,35 @@ class Rover:
         self.F_fxn = lambdify(Delta_t, self.F)
         self.G_fxn = lambdify(Delta_t, self.G)
 
-    def u(self, t, x_hat):
+    def u(self, t):
         initial_wait = 5.0
 
         if t < initial_wait:
             return np.zeros(self.env.n_dim)
 
-        u = -self.K @ x_hat + self.L @ self.waypoint[: self.env.n_dim]
+        R = 0.01
+        omega = 2 * np.pi / 1000
 
-        # max_u = 0.01
-        # u = np.array([np.sign(ui) * min(abs(ui), max_u) for ui in u])
+        u = np.array(
+            [
+                self.u_x_mult * R * np.sin(omega * t),
+                self.u_y_mult * R * np.cos(omega * t),
+            ]
+        )[: self.env.n_dim]
 
         return u
 
     def update_state(self):
         t = self.agent.estimator.filt.get_time_estimate()
-        Delta_t = t - self.t_previous
+        Delta_t = max(0, t - self.t_previous)
 
-        x_hat = self.agent.estimator.filt.get_rover_state_estimate()
-
-        # Check if near waypoint
-        distance_to_waypoint = sqrt(
-            sum(square(x_hat[: self.env.n_dim] - self.waypoint[: self.env.n_dim]))
-        )
-        velocity_magnitude = sqrt(sum(square(x_hat[self.env.n_dim :])))
-        if (
-            distance_to_waypoint < self.waypoint_threshold
-            and velocity_magnitude < self.velocity_threshold
-        ):
-            self.visited[self.waypoint_index] = True
-
-            if self.waypoint_index < len(self.waypoints) - 1:
-                self.waypoint_index += 1
-                self.waypoint = self.waypoints[self.waypoint_index]
-
-        noise_scale = 0
+        noise_scale = 0.001
 
         F = self.F_fxn(Delta_t)
         x = self.x  # True state
         G = self.G_fxn(Delta_t)
         # Controls applied using estimated state
-        u = self.u(t, x_hat)  # + np.random.normal(0, noise_scale * Delta_t, 2)
+        u = self.u(t) + np.random.normal(0, noise_scale * Delta_t, self.env.n_dim)
 
         self.x = F @ x + G @ u
 
@@ -401,13 +372,11 @@ class Dynamics:
         self.F = lambdify(Delta_t, F)
         self.G = lambdify(Delta_t, G)
 
-    def u(self, t, x_hat):
+    def u(self, t):
         if self.env.ROVER_NAMES:
             u = np.concatenate(
                 [
-                    self.rover_dict[rover_name].u(
-                        t, self.rover_state[rover_name](*x_hat)
-                    )
+                    self.rover_dict[rover_name].u(t)
                     for rover_name in self.env.ROVER_NAMES
                 ]
             )
@@ -450,7 +419,7 @@ class Dynamics:
             return np.array(self.evaluate_f_true_time(*x, *taus, t))
 
     def step_x(self, x, tau, t_estimate):
-        x_prediction = self.F(tau) @ x + self.G(tau) @ self.u(t_estimate, x)
+        x_prediction = self.F(tau) @ x + self.G(tau) @ self.u(t_estimate)
         return x_prediction
 
     def step_P(self, P, tau):

@@ -71,9 +71,7 @@ class State_Log:
     def log_u(self):
         t_estimate = self.agent.estimator.filt.get_time_estimate()
 
-        x = self.agent.estimator.filt.x.copy()
-
-        u = self.env.dynamics.u(t_estimate, x)
+        u = self.env.dynamics.u(t_estimate)
 
         self._log_u.append(u)
 
