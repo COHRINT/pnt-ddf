@@ -27,19 +27,21 @@ class State_Log:
 
         self.log_epsilon_x = []
 
-    def log_state(self, measurement):
+    def log_state(self):
         t = self.agent.clock.magic_time()
 
-        x = self.agent.estimator.filt.x.copy()
-        P = self.agent.estimator.filt.P.copy()
+        x, P = self.agent.estimator.get_state_estimate()
 
         t_estimate = self.agent.estimator.filt.get_time_estimate()
 
         self.log_t.append(t)
         self.log_t_estimate.append(t_estimate)
+
         self.log_x.append(x)
-        self.log_x_true.append(measurement.x_true)
         self.log_P.append(P)
+
+        x_true = self.get_true()
+        self.log_x_true.append(x_true)
 
     def get_true(self):
         # Clock states

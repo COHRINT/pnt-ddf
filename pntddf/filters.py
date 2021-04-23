@@ -32,7 +32,7 @@ class LSQ_Filter:
 
         self.completed = False
 
-        self.broadcast_time = self.env.NUM_AGENTS * self.env.TRANSMISSION_WINDOW * 3
+        self.broadcast_time = self.env.NUM_AGENTS * self.env.TRANSMISSION_WINDOW * 2
 
     def estimate(self, measurement):
         self.add_measurement(measurement)
@@ -94,8 +94,20 @@ class LSQ_Filter:
 
             x_back_prediction = self.env.dynamics.step_x(x, tau, 0)
 
-            r = measurement.true - measurement.predict(x_back_prediction)
-            residuals.append(r / measurement.sigma)
+            r = measurement.z - measurement.predict(x_back_prediction)
+
+            if "rho" in measurement.name:
+                sigma_process_T = measurement.transmitter.clock.sigma_clock_process
+                sigma_process_R = measurement.receiver.clock.sigma_clock_process
+
+                sigma_T = abs(1 / 3 * sigma_process_T ** 2 * tau ** 3 * self.env.c ** 2)
+                sigma_R = abs(1 / 3 * sigma_process_R ** 2 * tau ** 3 * self.env.c ** 2)
+
+                sigma = measurement.sigma + sigma_T + sigma_R
+            else:
+                sigma = measurement.sigma
+
+            residuals.append(r / sigma)
 
         return np.array(residuals)
 
@@ -103,13 +115,13 @@ class LSQ_Filter:
         t = self.agent.clock.time()
 
         if measurement.local:
-            tau = measurement.time_process_local - t
+            tau = measurement.timestamp_receive - t
         else:
             R = measurement.receiver.name
             Delta_R, _ = self.agent.estimator.filt.get_clock_estimate(R, x)
-            P = measurement.processor.name
+            P = self.agent.name
             Delta_P, _ = self.agent.estimator.filt.get_clock_estimate(P, x)
-            tau = measurement.time_process_local - Delta_R + Delta_P - t
+            tau = measurement.timestamp_receive - Delta_R + Delta_P - t
 
         return tau
 
@@ -328,7 +340,7 @@ class Unscented_Kalman_Filter:
             assert 0 <= var_theta <= 1
 
         else:
-            y = measurement.true
+            y = measurement.z
             K = np.array(P_xy / P_yy, ndmin=2)
 
             r = y - y_prediction
@@ -355,124 +367,23 @@ class Unscented_Kalman_Filter:
         self.x = x_hat
         self.P = P_hat
 
-    def local_update_info(self, info, measurement):
-        if measurement is None:
-            info.x_updated = info.x
-            info.P_updated = info.P
-            return
-
-        x_prediction = info.x.copy()
-        P_prediction = info.P.copy()
-
-        chi = self.generate_sigma_points(x_prediction, P_prediction)
-
-        upsilon = [measurement.predict(chi_i) for chi_i in chi]
-
-        y_prediction = sum([w * upsilon_i for w, upsilon_i in zip(self.w_m, upsilon)])
-
-        P_xy = sum(
-            [
-                w
-                * (chi_i - x_prediction)[np.newaxis].T
-                @ (upsilon_i - y_prediction)[np.newaxis]
-                for w, chi_i, upsilon_i in zip(self.w_c, chi, upsilon)
-            ]
-        )
-
-        R = measurement.R
-
-        P_yy = (
-            sum(
-                [
-                    w
-                    * (upsilon_i - y_prediction)[np.newaxis].T
-                    @ (upsilon_i - y_prediction)[np.newaxis]
-                    for w, upsilon_i in zip(self.w_c, upsilon)
-                ]
-            )
-            + R
-        )
-
-        y = measurement.true
-        K = np.array(P_xy / P_yy, ndmin=2)
-
-        r = y - y_prediction
-        x_hat = (x_prediction + K * r).ravel()
-        P_hat = P_prediction - P_yy * (K.T @ K)
-
-        info.x_updated = x_hat
-        info.P_updated = P_hat
-
-    def fusion_update(self, info):
-        # local
-        local_info = self.get_local_info()
-
-        # received info
-        self.local_update_info(info, self.measurement)
-        info.Y = inv(info.P_updated)
-        info.y = info.Y @ info.x_updated
-
-        # fusion
-        information_set = [local_info, info]
-        fused_info = covariance_intersection(information_set, fast=True)
-
-        x_fused, P_fused = invert(fused_info.y, fused_info.Y)
-
-        self.x = x_fused
-        # ensure symmetric
-        Pc = cholesky(P_fused)
-        P_fused = Pc @ Pc.T
-        self.P = P_fused
-
-        if self.agent.name == "A":
-            indices = [0, 2]
-            x_true = self.agent.estimator.filt.state_log.get_true()
-            plot_ellipses(
-                [
-                    [
-                        local_info.x[indices],
-                        local_info.P[np.ix_(indices, indices)],
-                        "local {}".format(self.agent.name),
-                    ],
-                    [
-                        info.x[indices],
-                        info.P[np.ix_(indices, indices)],
-                        "info {}".format(info.transmitter.name),
-                    ],
-                    [x_fused[indices], P_fused[np.ix_(indices, indices)], "fused"],
-                    [x_true[indices], P_fused[np.ix_(indices, indices)] / 100, "true"],
-                ],
-                xlabel="$b_T$",
-                ylabel="$x_T$",
-            )
-
     def log(self, measurement):
-        self.state_log.log_state(measurement)
-        self.state_log.log_u()
+        if measurement.local:
+            self.state_log.log_state()
+            self.state_log.log_u()
 
     def step(self):
         self.update_t()
 
     def set_time_from_measurement(self, measurement):
-        time_process_local = measurement.time_process_local
-
         if self.agent.name == "Z":
             self.t_kp1 = self.agent.clock.magic_time()
         elif measurement.local:
-            self.t_kp1 = time_process_local
+            self.t_kp1 = measurement.timestamp_receive
         else:
             Delta_R, _ = self.get_clock_estimate(measurement.receiver.name)
-            Delta_P, _ = self.get_clock_estimate(measurement.processor.name)
-            self.t_kp1 = time_process_local - Delta_R + Delta_P
-
-        self.t_Q_prev = self.t_Q
-        self.t_Q = max(self.t_Q, self.t_kp1)
-
-    def set_time_from_info(self, info):
-        Delta_T, _ = self.get_clock_estimate(info.transmitter.name)
-        Delta_R, _ = self.get_clock_estimate(info.receiver.name)
-
-        self.t_kp1 = info.timestamp_transmit - Delta_T + Delta_R
+            Delta_P, _ = self.get_clock_estimate(self.agent.name)
+            self.t_kp1 = measurement.timestamp_receive - Delta_R + Delta_P
 
         self.t_Q_prev = self.t_Q
         self.t_Q = max(self.t_Q, self.t_kp1)

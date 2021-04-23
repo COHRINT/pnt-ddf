@@ -10,6 +10,7 @@ from scipy.constants import c
 from pntddf.agent import Agent
 from pntddf.centralized import Agent_Centralized
 from pntddf.dynamics import Dynamics
+from pntddf.sensors import Sensors
 
 
 class Environment:
@@ -18,13 +19,16 @@ class Environment:
 
     @property
     def now(self):
-        return rospy.Time.now()
+        return rospy.Time.now().to_sec()
 
 
 def setup_env(config_file, ros=False):
     if not ros:
         env = simpy.Environment()
     else:
+        global rospy
+        import rospy
+
         env = Environment()
 
     env.ros = ros
@@ -168,9 +172,11 @@ def setup_env(config_file, ros=False):
 
     # Dynamics
     env.dynamics = Dynamics(env)
+    env.sensors = Sensors(env)
 
-    for agent in env.agents:
-        agent.init()
+    if not env.ros:
+        for agent in env.agents:
+            agent.init()
 
     # Centralized
     if env.centralized:

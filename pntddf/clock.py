@@ -87,7 +87,10 @@ class Clock:
         return self.env.now
 
     def get_transmit_wait(self):
-        Delta, Delta_dot = self.agent.estimator.get_clock_estimate()
+        if hasattr(self.agent, "estimator"):
+            Delta, Delta_dot = self.agent.estimator.get_clock_estimate()
+        else:
+            Delta, Delta_dot = [0, 0]
 
         t = self.time()
         index = self.agent.index
@@ -98,7 +101,11 @@ class Clock:
         cycle_number = np.floor((t + cycle_time - index * window) / cycle_time)
         cycle_number = int(cycle_number)
 
-        if cycle_number == self.agent.radio.cycle_number_previous:
+        if hasattr(self.agent, "radio"):
+            cycle_number_previous = self.agent.radio.cycle_number_previous
+        else:
+            cycle_number_previous = 0
+        if cycle_number == cycle_number_previous:
             cycle_number += 1
 
         t_transmit = cycle_number * cycle_time + index * window
@@ -115,27 +122,12 @@ class Clock:
         return wait_time, cycle_number
 
     def derivation(self):
-        # q = [ h[t] h_dot[t] ]
-        # q_dot = A @ q + w
-        # A = [[ 0 1 ]
-        #      [ 0 0 ]]
-        # w ~ N(0, Q)
-        # Q = [[ 0 0 ]
-        #      [ 0 sigma_q ** 2 ]]
-
         A = np.array(
             [
                 [0, 1],
                 [0, 0],
             ]
         )
-        # A = np.array(
-        # [
-        # [0, 1, 0],
-        # [0, 0, 1],
-        # [0, 0, 0],
-        # ]
-        # )
 
         Q = np.array(
             [
@@ -143,38 +135,15 @@ class Clock:
                 [0, self.sigma_clock_process ** 2],
             ]
         )
-        # Q = np.array(
-        # [
-        # [0, 0, 0],
-        # [0, 0, 0],
-        # [0, 0, self.sigma_clock_process ** 2],
-        # ]
-        # )
 
         T = symbols("T", real=True)
-        # sigma_w = symbols("sigma_w", real=True)
-        # Qw = np.array(
-        # [
-        # [0, 0, 0],
-        # [0, 0, 0],
-        # [0, 0, sigma_w ** 2],
-        # ]
-        # )
 
         Z = Matrix(np.block([[-A, Q], [np.zeros([2, 2]), A.T]])) * T
-        # Z = Matrix(np.block([[-A, Q], [np.zeros([3, 3]), A.T]])) * T
-        # Zw = Matrix(np.block([[-A, Qw], [np.zeros([3, 3]), A.T]])) * T
 
         eZ = exp(Z)
-        # eZw = exp(Zw)
 
         F = eZ[2:, 2:].T
         Q_d = F @ eZ[:2, 2:]
-        # F = eZ[3:, 3:].T
-        # Q_d = F @ eZ[:3, 3:]
-        # Q_dw = F @ eZw[:3, 3:]
 
         self.F = lambdify(T, F)
         self.Q = lambdify(T, Q_d)
-        set_trace()
-        # self.Qw = lambdify([T, sigma_w], Q_dw)

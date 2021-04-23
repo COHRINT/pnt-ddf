@@ -38,5 +38,17 @@
       <color> 0.50 0.50 0.50 </color>
       <surfaceFriction> 0.1 0.1 </surfaceFriction> 
     </include>
+
+    <include>
+      <uri>model://radio_tower</uri>
+      <name>beacon_A</name>
+      <pose>10000.0 0.0 0.0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://radio_tower</uri>
+      <name>beacon_B</name>
+      <pose>0.0 10000.0 0.0 0 0 0</pose>
+    </include>
   </world>
 </sdf>

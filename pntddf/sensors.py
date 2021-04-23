@@ -6,9 +6,8 @@ from sympy.utilities.lambdify import lambdify
 
 
 class Sensors:
-    def __init__(self, env, agent):
+    def __init__(self, env):
         self.env = env
-        self.agent = agent
 
         self.define_measurement_models()
 
@@ -72,6 +71,7 @@ class Sensors:
 
     def define_gps_model(self):
         self.evaluate_gps = {}
+        self.evaluate_gps_R = {}
 
         x_vec = self.env.dynamics.x_vec
 
@@ -80,3 +80,7 @@ class Sensors:
             h = Matrix([x])
 
             self.evaluate_gps[agent_name] = lambdify(x_vec, np.squeeze(h), "numpy")
+
+            if self.env.agent_configs[agent_name].getboolean("gps"):
+                sigma_gps = self.env.agent_configs[agent_name].getfloat("sigma_gps")
+                self.evaluate_gps_R[agent_name] = sigma_gps ** 2

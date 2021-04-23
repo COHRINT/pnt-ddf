@@ -10,7 +10,8 @@ from pntddf.results import (comm_savings, plot_b, plot_b_dot, plot_residuals,
                             plot_trajectory)
 
 # config_file = "../config/sim.config"
-config_file = "../config/1d.config"
+# config_file = "../config/1d.config"
+config_file = "../config/demo.config"
 
 env = setup_env(config_file)
 

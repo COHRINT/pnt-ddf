@@ -14,6 +14,9 @@ class Rover:
         self.agent_name = agent.name
         self.agent_config = self.env.agent_configs[agent.name]
 
+        if env.ros:
+            self.setup_ros()
+
         self.setup_x()
         self.setup_controls()
 
@@ -21,6 +24,18 @@ class Rover:
         self.setup_dynamics()
 
         self.t_previous = 0
+
+    def setup_ros(self):
+        global rospy
+        import rospy
+        from gazebo_msgs.srv import GetModelState, GetModelStateRequest
+
+        rospy.wait_for_service("/gazebo/get_model_state")
+        self.get_model_srv = rospy.ServiceProxy(
+            "/gazebo/get_model_state", GetModelState
+        )
+        self.model = GetModelStateRequest()
+        self.model.model_name = "jackal_{}".format(self.agent.name)
 
     def setup_x(self):
         if self.agent_config.getboolean("random_initial_state"):
@@ -140,17 +155,33 @@ class Rover:
         return np.array([self.get_sym(v) for v in self.env.dim_names])
 
     def get_true_position(self):
-        self.update_state()
+        if not self.env.ros:
+            self.update_state()
 
-        return self.x[: self.env.n_dim].copy()
+            return self.x[: self.env.n_dim].copy()
+        else:
+            result = self.get_model_srv(self.model)
+            x = result.pose.position.x
+            y = result.pose.position.y
+            z = result.pose.position.z
+
+            return np.array([x, y, z])[: self.env.n_dim]
 
     def get_sym_velocity(self):
         return np.array([self.get_sym(v + "_dot") for v in self.env.dim_names])
 
     def get_true_velocity(self):
-        self.update_state()
+        if not self.env.ros:
+            self.update_state()
 
-        return self.x[self.env.n_dim :].copy()
+            return self.x[self.env.n_dim :].copy()
+        else:
+            result = self.get_model_srv(self.model)
+            v_x = result.twist.linear.x
+            v_y = result.twist.linear.y
+            v_z = result.twist.linear.z
+
+            return np.array([v_x, v_y, v_z])[: self.env.n_dim]
 
 
 class Beacon:
@@ -397,16 +428,6 @@ class Dynamics:
         distance = sqrt(sum(square(alpha_position - beta_position)))
 
         return distance
-
-    def los_between_agents(self, alpha, beta, x_hat):
-        if alpha == "T":
-            los = np.array(self.los_target_functions[beta](*x_hat))
-        elif beta == "T":
-            los = np.array(self.los_target_functions[alpha](*x_hat))
-        else:
-            los = self.get_sym_position(alpha) - self.get_sym_position(beta)
-
-        return los
 
     def get_sym(self, variable, agent_name):
         if variable in self.env.B_STATES:

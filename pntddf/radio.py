@@ -6,7 +6,7 @@ from bpdb import set_trace
 from scipy.constants import c
 from scipy.spatial.distance import euclidean as distance
 
-from measurements import Pseudorange
+from pntddf.measurements import Pseudorange
 
 
 class Radio:
@@ -20,8 +20,6 @@ class Radio:
 
         self.message_index = 1
 
-        self.ci_rate = self.env.ci_rate
-
         # Amount of time to wait before transmitting
         if "wait" in self.agent.config.keys():
             self.wait = self.agent.config.getfloat("wait")
@@ -31,19 +29,42 @@ class Radio:
         if not self.env.ros:
             self.beacon_process = self.env.process(self.beacon())
         else:
-            self.beacon_ros()
+            self.ros_init()
+
+    def ros_init(self):
+        global rospy
+        import rospy
+
+        global Transmission_ROS
+        from pntddf_ros.msg import Transmission as Transmission_ROS
+
+        # set up publisher
+        topic_name = "transmission_{}".format(self.agent.name)
+        self.pub = rospy.Publisher(topic_name, Transmission_ROS, queue_size=10)
+
+        # register subscriber
+        for agent in self.env.agents:
+            if agent == self.agent.name:
+                continue
+            topic_name = "/agent_{}/transmission_{}".format(agent.name, agent.name)
+            rospy.Subscriber(topic_name, Transmission_ROS, self.receive_ros)
+
+        self.beacon_ros()
 
     def beacon_ros(self):
-        # TODO: Use get_transmit_wait and then call rospy.sleep()
-
         while not rospy.is_shutdown():
-            try:
-                wait_time, cycle_number = self.agent.clock.get_transmit_wait()
-                yield self.env.timeout(wait_time)
-            except simpy.Interrupt:
-                continue
+            wait_time, cycle_number = self.agent.clock.get_transmit_wait()
+            rospy.sleep(wait_time)
 
             self.prepare_message()
+
+            transmission = Transmission_ROS()
+            transmission.transmitter = self.agent.name
+            transmission.timestamp_transmit = self.agent.clock.time()
+            transmission.measurements = [
+                meas.to_ros_message() for meas in self.message.measurements
+            ]
+            self.pub.publish(transmission)
 
     def beacon(self):
         # Initial wait before transmitting
@@ -70,31 +91,21 @@ class Radio:
 
     def prepare_message(self):
         self.message = Message()
-        pseudorange = Pseudorange(self.env)
-        pseudorange.local = True
-        self.message.pseudorange = pseudorange
 
         # Transmitter
         self.message.transmitter = self.agent
-        pseudorange.transmitter = self.agent
 
         # Transmit time
         timestamp_transmit = self.agent.clock.time()
         self.message.timestamp_transmit = timestamp_transmit
-        pseudorange.timestamp_transmit = timestamp_transmit
 
         # Measurements
-        self.message.measurements = (
-            self.agent.estimator.get_event_triggering_measurements()
-        )
-
-        # Local Info
-        if ((self.message_index % self.ci_rate) == 0) and self.env.ci:
-            local_info = self.agent.estimator.get_local_info()
-            if local_info:
-                local_info.transmitter = self.agent
-                local_info.timestamp_transmit = timestamp_transmit
-                self.message.local_info = local_info
+        if hasattr(self.agent, "estimator"):
+            self.message.measurements = (
+                self.agent.estimator.get_event_triggering_measurements()
+            )
+        else:
+            self.message.measurements = []
 
         self.message_index += 1
 
@@ -108,7 +119,6 @@ class Radio:
         for recipient in agent_recipients:
             message = copy(self.message)
             message.receiver = recipient
-            message.pseudorange.receiver = recipient
 
             Transmission(self.env, message)
 
@@ -117,24 +127,40 @@ class Radio:
 
         timestamp_receive = self.agent.clock.time()
         message.timestamp_receive = timestamp_receive
-        message.pseudorange.timestamp_receive = timestamp_receive
 
         self.receive_log[message.transmitter.name].append(
             (self.agent.clock.magic_time(), message.timestamp_receive)
         )
 
+        pseudorange = Pseudorange(
+            self.env,
+            message.transmitter,
+            message.receiver,
+            message.timestamp_transmit,
+            message.timestamp_receive,
+        )
+
         # Pass the measurements to estimator
-        self.agent.estimator.new_measurement(message.pseudorange)
+        self.agent.estimator.new_measurement(pseudorange)
 
         for measurement in message.measurements:
             measurement = copy(measurement)
             measurement.time_receive = timestamp_receive
             self.agent.estimator.new_measurement(measurement)
 
-        if message.local_info:
-            message.local_info.receiver = self.agent
-            message.local_info.timestamp_receive = timestamp_receive
-            self.agent.estimator.new_info(message.local_info)
+    def receive_ros(self, transmission):
+        transmission = copy(transmission)
+        transmission.receiver = self.agent.name
+        dist = self.env.dynamics.distance_between_agents_true(
+            transmission.transmitter, transmission.receiver
+        )
+
+        propagation_time = dist / self.env.c
+        rospy.loginfo(
+            "{} received from {}: {:.2f} m".format(
+                self.agent.name, transmission.transmitter, dist
+            )
+        )
 
 
 class Transmission:
@@ -170,18 +196,12 @@ class Message:
         self.transmitter = None
         self.receiver = None
 
-        self.local_info = None
-        self.messages = None
-
-        self.pseudorange = None
+        self.measurements = None
 
     def __copy__(self):
         new = type(self)()
 
         new.__dict__.update(self.__dict__)
-        new.messages = deepcopy(self.messages)
-        new.pseudorange = copy(self.pseudorange)
-
-        new.local_info = copy(self.local_info)
+        new.measurements = [copy(meas) for meas in self.measurements]
 
         return new

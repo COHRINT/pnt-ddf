@@ -34,24 +34,6 @@ def plot_test(env, agent):
     set_trace()
 
 
-def check_NEES_NIS(env):
-    epsilon_x = 0
-    epsilon_z = 0
-
-    for agent_index in range(env.NUM_AGENTS):
-        agent = env.agents[agent_index]
-        df_state = agent.estimator.get_state_log_df()
-        df_meas = agent.estimator.get_residuals_log_df()
-
-        epsilon_x += df_state.epsilon_x.median() / env.NUM_STATES
-        epsilon_z += df_meas.epsilon_z.median() / len(agent.sensors.measurement_names)
-
-    epsilon_x /= env.NUM_AGENTS
-    epsilon_z /= env.NUM_AGENTS
-
-    return epsilon_x, epsilon_z
-
-
 def plot_b(env, agent, df, _):
     if env.NUM_B_STATES == 0:
         return
@@ -297,7 +279,7 @@ def plot_residuals(env, agent, _, df_meas):
     axes = axes.ravel()
 
     fig.suptitle(
-        "Agent {} Measurement Residuals, {}E {}I {}L".format(
+        "{} Meas. Residuals, {}E {}I {}L".format(
             agent.name,
             df_meas.explicit.sum(),
             df_meas.implicit.sum(),

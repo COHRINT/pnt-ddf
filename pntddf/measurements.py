@@ -1,5 +1,4 @@
 from copy import copy
-from dataclasses import dataclass
 
 import numpy as np
 from bpdb import set_trace
@@ -7,221 +6,129 @@ from numpy import sqrt
 from scipy.constants import c
 
 
-@dataclass
-class Measurement_Data:
-    t: float
-    z: float
-    r: float
-    sigma: float
-    P_yy_sigma: float
-    name: str
-    latex_name: str
-    local: bool
-    implicit: bool
-    explicit: bool
-
-
 class Measurement:
-    def __init__(self):
-        self._t = None
-        self._z = None
-        self._r = None
-        self._sigma = None
-        self._P_yy_sigma = None
-        self._name = None
-        self._latex_name = None
+    def __init__(self, env):
+        self.env = env
 
-        self.local = False
-        self.implicit = False
-        self.explicit = False
+        self.t = None
+        self.z = None
+        self.r = None
+        self.sigma = None
+        self.R = None
+        self.P_yy_sigma = None
 
-        self._processor = None
+        self.name = None
+        self.latex_name = None
 
-    @property
-    def processor(self):
-        return self._processor
-
-    @processor.setter
-    def processor(self, processor):
-        self._processor = processor
+        self._local = True
+        self._explicit = False
+        self._implicit = False
 
     @property
-    def data(self):
-        return Measurement_Data(
-            self._t,
-            self._z,
-            self._r,
-            self._sigma,
-            self._P_yy_sigma,
-            self._name,
-            self._latex_name,
-            self.local,
-            self.implicit,
-            self.explicit,
-        )
+    def local(self):
+        # only one of these can be true
+        assert self._local ^ self._explicit ^ self._implicit
+        return self._local
+
+    @local.setter
+    def local(self, local):
+        self._local = local
 
     @property
-    def z(self):
-        return self._z
+    def explicit(self):
+        assert self._local ^ self._explicit ^ self._implicit
+        return self._explicit
 
-    @z.setter
-    def z(self, z):
-        self._z = z
-
-    @property
-    def t(self):
-        return self._t
-
-    @t.setter
-    def t(self, t):
-        self._t = t
+    @explicit.setter
+    def explicit(self, explicit):
+        self._explicit = explicit
 
     @property
-    def r(self):
-        return self._r
+    def implicit(self):
+        assert self._local ^ self._explicit ^ self._implicit
+        return self._implicit
 
-    @r.setter
-    def r(self, r):
-        self._r = r
-
-    @property
-    def P_yy_sigma(self):
-        return self._P_yy_sigma
-
-    @P_yy_sigma.setter
-    def P_yy_sigma(self, P_yy_sigma):
-        self._P_yy_sigma = P_yy_sigma
-
-    @property
-    def sigma(self):
-        return self._sigma
-
-    @sigma.setter
-    def sigma(self, sigma):
-        self._sigma = sigma
+    @implicit.setter
+    def implicit(self, implicit):
+        self._implicit = implicit
 
     def __repr__(self):
-        return "{} = {:.2f}".format(self._name, self.true)
+        return "{} = {:.2f}".format(self.name, self.z)
+
+    def to_ros_message(self):
+        from pntddf_ros.msg import Measurement as Measurement_ROS
+
+        measurement = Measurement_ROS()
+        measurement.t = self.t
+        measurement.z = self.z
+        measurement.sigma = self.sigma
+        measurement.implicit = self.implicit
+
+        return measurement
 
 
 class Pseudorange(Measurement):
-    def __init__(self, env):
-        super().__init__()
+    def __init__(
+        self, env, transmitter, receiver, timestamp_transmit, timestamp_receive
+    ):
+        super().__init__(env)
 
-        self.env = env
+        self.transmitter = transmitter
+        self.receiver = receiver
 
-        self._transmitter = None
-        self._timestamp_transmit = None
+        self.timestamp_transmit = timestamp_transmit
+        self.timestamp_receive = timestamp_receive
 
-        self._receiver = None
-        self._timestamp_receive = None
+        self.define_measurement()
 
-    @property
-    def name(self):
-        return self._name
+    def define_measurement(self):
+        self.z = c * (self.timestamp_receive - self.timestamp_transmit)
 
-    @property
-    def transmitter(self):
-        return self._transmitter
+        TR = self.transmitter.name + self.receiver.name
+        R = self.env.sensors.evaluate_pseudorange_R[TR]
+        self.R = R
+        self.sigma = sqrt(R)
 
-    @transmitter.setter
-    def transmitter(self, transmitter):
-        assert self._transmitter is None
-        self._transmitter = transmitter
-
-    @property
-    def timestamp_transmit(self):
-        return self._timestamp_transmit
-
-    @timestamp_transmit.setter
-    def timestamp_transmit(self, timestamp_transmit):
-        assert self._timestamp_transmit is None
-        self._timestamp_transmit = timestamp_transmit
-
-    @property
-    def receiver(self):
-        return self._receiver
-
-    @receiver.setter
-    def receiver(self, receiver):
-        assert self._receiver is None
-        self._receiver = receiver
-
-    @property
-    def timestamp_receive(self):
-        return self._timestamp_receive
-
-    @timestamp_receive.setter
-    def timestamp_receive(self, timestamp_receive):
-        assert self._timestamp_receive is None
-        self._timestamp_receive = timestamp_receive
-        self.define_true_measurement()
-
-    @property
-    def true(self):
-        self.define_true_measurement()
-        return copy(self._true_measurement)
+        self.name = "rho_{}{}".format(self.receiver.name, self.transmitter.name)
+        self.latex_name = "$\\rho_{{{}{}}}$".format(
+            self.receiver.name, self.transmitter.name
+        )
 
     def predict(self, x_hat):
         TR = self.transmitter.name + self.receiver.name
 
-        prediction_func = self.processor.sensors.evaluate_pseudorange[TR]
+        prediction_func = self.env.sensors.evaluate_pseudorange[TR]
 
         rho = prediction_func(*x_hat)
 
         return np.array(rho)
 
-    def define_true_measurement(self):
-        self._true_measurement = c * (self.timestamp_receive - self.timestamp_transmit)
-        self._name = "rho_{}{}".format(self.receiver.name, self.transmitter.name)
-        self._latex_name = "$\\rho_{{{}{}}}$".format(
-            self.receiver.name, self.transmitter.name
-        )
-        self._z = copy(self._true_measurement)
-
-    @property
-    def R(self):
-        self.define_R()
-        return copy(self._R)
-
-    @property
-    def sigma(self):
-        self.define_R()
-        return copy(self._sigma)
-
-    def define_R(self):
-        TR = self.transmitter.name + self.receiver.name
-
-        R = self.processor.sensors.evaluate_pseudorange_R[TR]
-
-        self._R = R
-        self._sigma = copy(sqrt(R))
-
 
 class GPS_Measurement(Measurement):
-    def __init__(self, env, axis, agent):
-        super().__init__()
+    def __init__(self, env, z, axis, agent, timestamp_receive):
+        super().__init__(env)
 
-        self.env = env
+        self.z = z
         self.axis = axis
+        self.dim_name = self.env.dim_names[self.axis]
+
+        self.receiver = agent
         self.agent = agent
 
-        self.time_receive = agent.clock.time()
+        self.timestamp_receive = timestamp_receive
 
-        self.sigma_gps = self.agent.config.getfloat("sigma_gps")
-        self.define_true_measurement()
+        self.define_measurement()
 
-    @property
-    def name(self):
-        return self._name
+    def define_measurement(self):
+        R = self.env.sensors.evaluate_gps_R[self.agent.name]
+        self.R = R
+        self.sigma = np.sqrt(R)
 
-    @property
-    def true(self):
-        return copy(self._true_measurement)
+        self.name = "gps_{}_{}".format(self.env.dim_names[self.axis], self.agent.name)
+        self.latex_name = "GPS {} {}".format(self.dim_name, self.agent.name)
 
     def predict(self, x_hat):
-        # account for time of prediction compared to time of measurement?
-        prediction_func = self.processor.sensors.evaluate_gps[self.agent.name]
+        prediction_func = self.env.sensors.evaluate_gps[self.agent.name]
 
         pos = prediction_func(*x_hat)
 
@@ -231,29 +138,3 @@ class GPS_Measurement(Measurement):
             pos = pos[self.axis]
 
         return pos
-
-    def define_true_measurement(self):
-        measurement = self.env.dynamics.get_true_position(self.agent.name)[self.axis]
-        noise = np.random.normal(0, self.sigma_gps)
-        self._true_measurement = measurement + noise
-
-        self._name = "gps_{}_{}".format(self.env.dim_names[self.axis], self.agent.name)
-        self._latex_name = "GPS {} {}".format(
-            self.env.dim_names[self.axis], self.agent.name
-        )
-
-        self._z = copy(self._true_measurement)
-
-    @property
-    def R(self):
-        self.define_R()
-        return copy(self._R)
-
-    @property
-    def sigma(self):
-        self.define_R()
-        return copy(self._sigma)
-
-    def define_R(self):
-        self._sigma = self.sigma_gps
-        self._R = self._sigma ** 2

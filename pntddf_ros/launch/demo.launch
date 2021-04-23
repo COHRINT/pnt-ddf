@@ -11,48 +11,26 @@
 
   <!-- Spawn Jackals -->
   <arg name="rviz"       default="false"/>
-  <arg name="ns0"        default="jackal_0"/>
-  <arg name="ns1"        default="jackal_1"/>
-  <arg name="ns2"        default="jackal_2"/>
-  <arg name="config0"    default="base"/>
-  <arg name="config0_id" default="0"/>
-  <arg name="config1"    default="base"/>
-  <arg name="config1_id" default="1"/>
-  <arg name="config2"    default="base"/>
-  <arg name="config2_id" default="2"/>
+  <arg name="nsT"        default="jackal_T"/>
+  <arg name="nsU"        default="jackal_U"/>
+  <arg name="nsV"        default="jackal_V"/>
+  <arg name="configT"    default="base"/>
+  <arg name="configT_id" default="T"/>
+  <arg name="configU"    default="base"/>
+  <arg name="configU_id" default="U"/>
+  <arg name="configV"    default="base"/>
+  <arg name="configV_id" default="V"/>
   
   <include file="$(find multi_jackal_base)/launch/jackal_base.launch">
-    <arg name="ns"            value="$(arg ns0)"/>
-    <arg name="config"        value="$(arg config0)"/>
-    <arg name="config_id"     value="$(arg config0_id)"/>
+    <arg name="ns"            value="$(arg nsT)"/>
+    <arg name="config"        value="$(arg configT)"/>
+    <arg name="config_id"     value="$(arg configT_id)"/>
     <arg name="use_move_base" value="true"/>
     <arg name="use_global_ekf" default="false"/>
     <arg name="use_global_tf"  default="true"/>
     <arg name="x"             value="0"/>
     <arg name="y"             value="0"/>
   </include>
-  
-  <!-- <include file="$(find multi_jackal_base)/launch/jackal_base.launch"> -->
-  <!--   <arg name="ns"            value="$(arg ns1)"/> -->
-  <!--   <arg name="config"        value="$(arg config1)"/> -->
-  <!--   <arg name="config_id"     value="$(arg config1_id)"/> -->
-  <!--   <arg name="use_move_base" value="true"/> -->
-  <!--   <arg name="use_global_ekf" default="false"/> -->
-  <!--   <arg name="use_global_tf"  default="true"/> -->
-  <!--   <arg name="x"             value="3"/> -->
-  <!--   <arg name="y"             value="0"/> -->
-  <!-- </include> -->
-
-  <!-- <include file="$(find multi_jackal_base)/launch/jackal_base.launch"> -->
-  <!--   <arg name="ns"            value="$(arg ns2)"/> -->
-  <!--   <arg name="config"        value="$(arg config2)"/> -->
-  <!--   <arg name="config_id"     value="$(arg config2_id)"/> -->
-  <!--   <arg name="use_move_base" value="true"/> -->
-  <!--   <arg name="use_global_ekf" default="false"/> -->
-  <!--   <arg name="use_global_tf"  default="true"/> -->
-  <!--   <arg name="x"             value="2"/> -->
-  <!--   <arg name="y"             value="3"/> -->
-  <!-- </include> -->
 
   <node pkg="tf" type="static_transform_publisher" name="world_transform"
         args="0 0 0 0 0 0 world map 100"/>
@@ -62,7 +40,11 @@
       <arg name="agent_name" value="A"/>
   </include>
 
-    <include file="$(find pntddf_ros)/launch/agent.launch"> 
-      <arg name="agent_name" value="T"/>
+  <include file="$(find pntddf_ros)/launch/agent.launch"> 
+      <arg name="agent_name" value="B"/>
+  </include>
+
+  <include file="$(find pntddf_ros)/launch/agent.launch"> 
+    <arg name="agent_name" value="T"/>
   </include>
 </launch>

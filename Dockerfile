@@ -47,6 +47,8 @@ RUN git clone https://github.com/NicksSimulationsROS/multi_jackal
 # Gazebo models
 RUN mkdir -p /root/.gazebo/models/ground_plane
 COPY gazebo_models/ground_plane/ /root/.gazebo/models/ground_plane
+RUN mkdir -p /root/.gazebo/models/radio_tower
+COPY gazebo_models/radio_tower/ /root/.gazebo/models/radio_tower
 RUN mkdir -p /root/.gazebo/models/sun
 COPY gazebo_models/sun/ /root/.gazebo/models/sun
 

@@ -22,17 +22,14 @@ class Agent:
         # Clock
         self.clock = Clock(self.env, self)
 
-        # Radio
-        self.radio = Radio(self.env, self)
-
-        # Sensors
-        self.sensors = Sensors(self.env, self)
-
         # Estimator
         self.estimator = Estimator(self.env, self)
 
+        # Radio
+        self.radio = Radio(self.env, self)
+
         # GPS
-        if self.config.getboolean("gps"):
+        if self.config.getboolean("gps") and not self.env.ros:
             self.gps = GPS(self.env, self)
 
     def __repr__(self):
