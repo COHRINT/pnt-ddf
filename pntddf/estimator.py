@@ -32,6 +32,7 @@ class Estimator:
         self.run_filter(measurement)
 
     def run_filter(self, measurement):
+        rospy.loginfo("{} has measurement {}".format(self.agent.name, measurement.name))
         self.set_time_from_measurement(measurement)
 
         if self.env.lsq_init and not self.lsq_init_completed:

@@ -333,6 +333,7 @@ class Unscented_Kalman_Filter:
             K = np.array(P_xy / P_yy, ndmin=2)
 
             measurement.r = z_bar
+            # just for plotting residuals
             measurement.t = self.agent.clock.magic_time()
             measurement.P_yy_sigma = np.sqrt(P_yy)
             x_hat = (x_prediction + K * z_bar).ravel()
@@ -345,6 +346,7 @@ class Unscented_Kalman_Filter:
 
             r = y - y_prediction
             measurement.r = r
+            # just for plotting residuals
             measurement.t = self.agent.clock.magic_time()
             measurement.P_yy_sigma = np.sqrt(P_yy)
             x_hat = (x_prediction + K * r).ravel()

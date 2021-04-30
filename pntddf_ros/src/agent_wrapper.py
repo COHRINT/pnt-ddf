@@ -21,7 +21,7 @@ class Agent_Wrapper:
         self.agent = env.agent_dict[self.agent_name]
         self.agent.init()
 
-        rate = rospy.Rate(0.1)
+        rate = rospy.Rate(1)
 
         while not rospy.is_shutdown():
             rospy.loginfo("success {}".format(self.agent_name))

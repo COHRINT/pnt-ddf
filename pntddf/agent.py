@@ -1,6 +1,7 @@
 import numpy as np
 from bpdb import set_trace
 
+from pntddf.asset_detections import Asset_Detections_Receiver
 from pntddf.clock import Clock
 from pntddf.dynamics import Dynamics
 from pntddf.estimator import Estimator
@@ -24,6 +25,13 @@ class Agent:
 
         # Estimator
         self.estimator = Estimator(self.env, self)
+
+        # Asset Detections
+        if self.env.ros:
+            import rospy
+
+            rospy.loginfo("ADR {}".format(self.name))
+            self.asset_detections_receiver = Asset_Detections_Receiver(self.env, self)
 
         # Radio
         self.radio = Radio(self.env, self)

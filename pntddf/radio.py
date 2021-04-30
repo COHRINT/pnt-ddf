@@ -44,7 +44,7 @@ class Radio:
 
         # register subscriber
         for agent in self.env.agents:
-            if agent == self.agent.name:
+            if agent.name == self.agent.name:
                 continue
             topic_name = "/agent_{}/transmission_{}".format(agent.name, agent.name)
             rospy.Subscriber(topic_name, Transmission_ROS, self.receive_ros)
@@ -151,16 +151,38 @@ class Radio:
     def receive_ros(self, transmission):
         transmission = copy(transmission)
         transmission.receiver = self.agent.name
+
         dist = self.env.dynamics.distance_between_agents_true(
             transmission.transmitter, transmission.receiver
         )
-
         propagation_time = dist / self.env.c
-        rospy.loginfo(
-            "{} received from {}: {:.2f} m".format(
-                self.agent.name, transmission.transmitter, dist
-            )
+
+        rospy.sleep(propagation_time)
+        timestamp_receive = self.agent.clock.time()
+        transmission.timestamp_receive = timestamp_receive
+
+        # create pseudorange measurement
+        pseudorange = Pseudorange(
+            self.env,
+            self.env.agent_dict[transmission.transmitter],
+            self.env.agent_dict[transmission.receiver],
+            transmission.timestamp_transmit,
+            transmission.timestamp_receive,
         )
+
+        # Pass the measurements to estimator
+        # self.agent.estimator.new_measurement(pseudorange)
+
+        # for measurement in transmission.measurements:
+        # measurement = copy(measurement)
+        # measurement.time_receive = timestamp_receive
+        # self.agent.estimator.new_measurement(measurement)
+
+        # rospy.loginfo(
+        # "{} received from {}: {:.2f} m".format(
+        # self.agent.name, transmission.transmitter, pseudorange.z
+        # )
+        # )
 
 
 class Transmission:

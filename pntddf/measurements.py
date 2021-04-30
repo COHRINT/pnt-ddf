@@ -59,7 +59,6 @@ class Measurement:
         from pntddf_ros.msg import Measurement as Measurement_ROS
 
         measurement = Measurement_ROS()
-        measurement.t = self.t
         measurement.z = self.z
         measurement.sigma = self.sigma
         measurement.implicit = self.implicit
@@ -126,6 +125,43 @@ class GPS_Measurement(Measurement):
 
         self.name = "gps_{}_{}".format(self.env.dim_names[self.axis], self.agent.name)
         self.latex_name = "GPS {} {}".format(self.dim_name, self.agent.name)
+
+    def predict(self, x_hat):
+        prediction_func = self.env.sensors.evaluate_gps[self.agent.name]
+
+        pos = prediction_func(*x_hat)
+
+        if type(pos) == float or type(pos) == np.float64:
+            pass
+        else:
+            pos = pos[self.axis]
+
+        return pos
+
+
+class Asset_Detection(Measurement):
+    def __init__(self, env, z, var, axis, agent, timestamp_receive):
+        super().__init__(env)
+
+        self.z = z
+        self.sigma = np.sqrt(var)
+        self.R = var
+
+        self.axis = axis
+        self.dim_name = self.env.dim_names[self.axis]
+
+        self.receiver = agent
+        self.agent = agent
+
+        self.timestamp_receive = timestamp_receive
+
+        self.define_measurement()
+
+    def define_measurement(self):
+        self.name = "detection_{}_{}".format(
+            self.env.dim_names[self.axis], self.agent.name
+        )
+        self.latex_name = "Detection {} {}".format(self.dim_name, self.agent.name)
 
     def predict(self, x_hat):
         prediction_func = self.env.sensors.evaluate_gps[self.agent.name]
