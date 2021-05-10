@@ -1,13 +1,19 @@
 import numpy as np
-import rospy
 from bpdb import set_trace
-from pntddf_ros.msg import DetectedAssetPosition, DetectedAssetPositionList
 
 from pntddf.measurements import Asset_Detection
 
 
 class Asset_Detections_Receiver:
     def __init__(self, env, agent):
+        global rospy
+        import rospy
+
+        global DetectedAssetPosition
+        global DetectedAssetPositionList
+        from pntddf_ros.msg import (DetectedAssetPosition,
+                                    DetectedAssetPositionList)
+
         self.env = env
         self.agent = agent
 

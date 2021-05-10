@@ -83,6 +83,9 @@ class LSQ_Filter:
                 Q = self.agent.estimator.filt.generate_Q(time_delta, np.array([0]))
                 self.x = x
                 self.P = P + Q
+            else:
+                set_trace()
+                print("fail")
 
     def lsq_func(self, x):
         measurements = self.measurements
@@ -155,11 +158,10 @@ class Unscented_Kalman_Filter:
 
         self.state_log = State_Log(env, agent)
 
-        self.measurement = None
-
         self.define_initial_state()
         self.define_event_triggering_measurements()
         self.define_constants()
+        self.define_explicit_measurement_logs()
 
     def define_initial_state(self, x=np.array([]), P=np.array([])):
         if x.size == 0:
@@ -193,6 +195,10 @@ class Unscented_Kalman_Filter:
 
         self.N = N
         self.lamb = lamb
+
+    def define_explicit_measurement_logs(self):
+        self.explicit_measurement_transmission_log = {}
+        self.explicit_measurement_reception_log = {}
 
     def predict_self(self):
         x_hat = self.x.copy()
@@ -277,7 +283,6 @@ class Unscented_Kalman_Filter:
         return sigma_points
 
     def local_update(self, measurement):
-        self.measurement = measurement
         x_prediction = self.x.copy()
         P_prediction = self.P.copy()
 
@@ -316,8 +321,12 @@ class Unscented_Kalman_Filter:
 
             Q_e = P_yy
 
-            nu_minus = -self.env.delta / np.sqrt(Q_e)
-            nu_plus = self.env.delta / np.sqrt(Q_e)
+            y_previous = self.explicit_measurement_reception_log[measurement.name]
+
+            set_trace()
+
+            nu_minus = y - y_previous - self.env.delta / np.sqrt(Q_e)
+            nu_plus = y - y_previous + self.env.delta / np.sqrt(Q_e)
 
             z_bar = (
                 (phi(nu_minus) - phi(nu_plus))
@@ -352,14 +361,27 @@ class Unscented_Kalman_Filter:
             x_hat = (x_prediction + K * r).ravel()
             P_hat = P_prediction - P_yy * (K.T @ K)
 
+        if measurement.explicit:
+            self.explicit_measurement_reception_log[measurement.name] = measurement.z
+
         if measurement.local and self.env.et:
             meas = copy(measurement)
             meas.local = False
 
             # Check if measurement is expected to be surprising
-            if np.abs(measurement.r) > self.env.delta:
+            # TODO: change triggering criteria
+            if measurement.name in self.explicit_measurement_transmission_log.keys():
+                y_previous = self.explicit_measurement_transmission_log[
+                    measurement.name
+                ]
+                Delta_y = y - y_previous
+            else:
+                Delta_y = np.inf
+
+            if np.abs(Delta_y) > self.env.delta:
                 meas.explicit = True
                 meas.implicit = False
+                self.explicit_measurement_transmission_log[meas.name] = meas.z
             else:
                 meas.explicit = False
                 meas.implicit = True
