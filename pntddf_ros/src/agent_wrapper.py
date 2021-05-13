@@ -15,6 +15,7 @@ class Agent_Wrapper:
         rospy.init_node(self.agent_label, log_level=rospy.INFO)
 
         config_file = "/opt/pnt_ddf_ws/config/sim.config"
+        config_file = "/home/lukez/inpass/src/pnt-ddf/config/sim.config"
 
         env = setup_env(config_file, ros=True)
 

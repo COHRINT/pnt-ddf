@@ -5,6 +5,7 @@ from numpy.linalg import inv
 from scipy.signal import place_poles
 from sympy import BlockMatrix, Matrix, diag, exp, eye, integrate, symbols
 from sympy.utilities.lambdify import lambdify
+import json
 
 
 class Rover:
@@ -13,6 +14,19 @@ class Rover:
         self.agent = agent
         self.agent_name = agent.name
         self.agent_config = self.env.agent_configs[agent.name]
+
+        print("-----------------------------------------------------")
+        print("-----------------------------------------------------")
+        print("-----------------------------------------------------")
+        print("-----------------------------------------------------")
+        print(self.agent_name)
+        print("-----------------------------------------------------")
+        print("-----------------------------------------------------")
+        print("-----------------------------------------------------")
+        print("-----------------------------------------------------")
+
+    
+        self.waypoints = json.loads(self.agent_config['waypoints'])
 
         if env.ros:
             self.setup_ros()
