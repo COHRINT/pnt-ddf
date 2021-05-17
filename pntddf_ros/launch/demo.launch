@@ -38,7 +38,7 @@
   <!-- Launch fake data publisher -->
   <node name="fake_gps" pkg="pntddf_ros" type="test_asset_publisher.py" output="screen" />
 
-  <node name="test_waypoint" pkg="pntddf_ros" type="test_waypoint.py" output="screen" />
+  <!-- <node name="test_waypoint" pkg="pntddf_ros" type="test_waypoint.py" output="screen" /> -->
 
   <!-- Launch PNT-DDF instances -->
   <include file="$(find pntddf_ros)/launch/agent.launch"> 

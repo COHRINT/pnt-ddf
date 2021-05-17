@@ -6,6 +6,8 @@ from scipy.signal import place_poles
 from sympy import BlockMatrix, Matrix, diag, exp, eye, integrate, symbols
 from sympy.utilities.lambdify import lambdify
 import json
+import actionlib
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 
 
 class Rover:
@@ -27,6 +29,8 @@ class Rover:
 
     
         self.waypoints = json.loads(self.agent_config['waypoints'])
+        self.waypointIdx = 0
+        self.waypoint_threshold = 0.8
 
         if env.ros:
             self.setup_ros()
@@ -39,6 +43,14 @@ class Rover:
 
         self.t_previous = 0
 
+        if env.ros:
+            rate = rospy.Rate(10)
+            while not rospy.is_shutdown():
+                self.move_to_goal()
+                rate.sleep()
+
+
+
     def setup_ros(self):
         global rospy
         import rospy
@@ -50,6 +62,11 @@ class Rover:
         )
         self.model = GetModelStateRequest()
         self.model.model_name = "jackal_{}".format(self.agent.name)
+
+        self.move_client = actionlib.SimpleActionClient("/{}/move_base".format(self.model.model_name),MoveBaseAction)
+        self.move_client.wait_for_server()
+        
+
 
     def setup_x(self):
         if self.agent_config.getboolean("random_initial_state"):
@@ -196,6 +213,48 @@ class Rover:
             v_z = result.twist.linear.z
 
             return np.array([v_x, v_y, v_z])[: self.env.n_dim]
+
+    def next_waypoint(self):
+        if self.waypointIdx >= len(self.waypoints):
+            return False
+        current_waypoint = np.array(self.waypoints[self.waypointIdx])
+
+        dist = np.linalg.norm(current_waypoint - self.get_true_position()[:2])
+        print(dist)
+        if dist < self.waypoint_threshold:
+            return True
+        return False
+
+
+    
+    def move_to_goal(self):
+        if self.next_waypoint():
+            self.waypointIdx+=1
+
+        if self.waypointIdx >= len(self.waypoints):
+            return
+        
+
+        waypoint = self.waypoints[self.waypointIdx]
+
+        goal = MoveBaseGoal()
+
+        goal.target_pose.header.frame_id = "{}/odom".format(self.model.model_name)
+        goal.target_pose.header.stamp = rospy.Time.now()
+
+        goal.target_pose.pose.position.x = waypoint[0]
+        goal.target_pose.pose.position.y = waypoint[1]
+
+        goal.target_pose.pose.orientation.w = 1.0
+
+        self.move_client.send_goal(goal)
+
+        sleep_duration = 1.0
+
+        rospy.sleep(sleep_duration)
+
+        self.move_client.cancel_goal()
+
 
 
 class Beacon:
