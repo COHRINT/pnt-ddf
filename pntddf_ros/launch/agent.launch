@@ -1,6 +1,19 @@
 <launch>
   <arg name="agent_name" />
+  <arg name="config_file"/>
+  <arg name="is_rover" default="False"/>
   <!-- <param name="agent_name" type="string" value="$(arg agent_name)" /> -->
 
-  <node name="agent_$(arg agent_name)" pkg="pntddf_ros" type="agent_wrapper.py" output="screen" ns="agent_$(arg agent_name)"/>
+
+  <group ns="agent_$(arg agent_name)">
+    <node name="agent_$(arg agent_name)" pkg="pntddf_ros" type="agent_wrapper.py" output="screen">
+      <param name="config_file" value="$(arg config_file)"/>
+    </node>
+
+    <group if="$(arg is_rover)">
+      <node name="agent_$(arg agent_name)_move" pkg="pntddf_ros" type="waypoint_move.py" output="screen">
+        <param name="config_file" value="$(arg config_file)"/>
+      </node>
+    </group>
+  </group>
 </launch>

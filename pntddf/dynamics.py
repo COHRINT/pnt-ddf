@@ -17,15 +17,15 @@ class Rover:
         self.agent_name = agent.name
         self.agent_config = self.env.agent_configs[agent.name]
 
-        print("-----------------------------------------------------")
-        print("-----------------------------------------------------")
-        print("-----------------------------------------------------")
-        print("-----------------------------------------------------")
-        print(self.agent_name)
-        print("-----------------------------------------------------")
-        print("-----------------------------------------------------")
-        print("-----------------------------------------------------")
-        print("-----------------------------------------------------")
+        # print("-----------------------------------------------------")
+        # print("-----------------------------------------------------")
+        # print("-----------------------------------------------------")
+        # print("-----------------------------------------------------")
+        # print(self.agent_name)
+        # print("-----------------------------------------------------")
+        # print("-----------------------------------------------------")
+        # print("-----------------------------------------------------")
+        # print("-----------------------------------------------------")
 
     
         self.waypoints = json.loads(self.agent_config['waypoints'])
@@ -42,12 +42,6 @@ class Rover:
         self.setup_dynamics()
 
         self.t_previous = 0
-
-        if env.ros:
-            rate = rospy.Rate(10)
-            while not rospy.is_shutdown():
-                self.move_to_goal()
-                rate.sleep()
 
 
 
@@ -220,14 +214,13 @@ class Rover:
         current_waypoint = np.array(self.waypoints[self.waypointIdx])
 
         dist = np.linalg.norm(current_waypoint - self.get_true_position()[:2])
-        print(dist)
         if dist < self.waypoint_threshold:
             return True
         return False
 
 
     
-    def move_to_goal(self):
+    def move_to_waypoint(self):
         if self.next_waypoint():
             self.waypointIdx+=1
 

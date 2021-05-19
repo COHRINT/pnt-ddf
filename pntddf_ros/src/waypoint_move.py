@@ -6,30 +6,29 @@ from pntddf.agent import Agent
 from pntddf.env import setup_env
 
 
-class Agent_Wrapper:
+class WaypointMove:
     def __init__(self):
         agent_label = rospy.get_namespace()  # e.g. '/agent_T/'
         self.agent_label = agent_label.replace("/", "")  # e.g. 'agent_T'
         self.agent_name = self.agent_label.split("_")[1]  # e.g. 'T'
 
-        rospy.init_node(self.agent_label, log_level=rospy.INFO)
+        rospy.init_node(self.agent_label+"_move", log_level=rospy.INFO)
 
-        
 
-        config_file = rospy.get_param("~config_file")
         # config_file = "/opt/pnt_ddf_ws/config/sim2.config"
+        config_file = rospy.get_param("~config_file")
 
-        env = setup_env(config_file, ros=True)
+        self.env = setup_env(config_file, ros=True)
 
-        self.agent = env.agent_dict[self.agent_name]
-        self.agent.init()
+        self.run()
 
+    def run(self):
         rate = rospy.Rate(1)
-
         while not rospy.is_shutdown():
-            rospy.loginfo("success {}".format(self.agent_name))
+            self.env.dynamics.rover_dict[self.agent_name].move_to_waypoint()
             rate.sleep()
 
 
+
 if __name__ == "__main__":
-    Agent_Wrapper()
+    WaypointMove()

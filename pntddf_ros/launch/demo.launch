@@ -1,4 +1,6 @@
 <launch>
+  <arg name="config_file" default="/opt/pnt_ddf_ws/config/sim2.config"/>
+
   <!-- Gazebo -->
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(find pntddf_ros)/worlds/demo.world"/>
@@ -43,13 +45,19 @@
   <!-- Launch PNT-DDF instances -->
   <include file="$(find pntddf_ros)/launch/agent.launch"> 
       <arg name="agent_name" value="A"/>
+      <arg name="config_file" value="$(arg config_file)"/>
   </include>
 
   <include file="$(find pntddf_ros)/launch/agent.launch"> 
       <arg name="agent_name" value="B"/>
+      <arg name="config_file" value="$(arg config_file)"/>
   </include>
 
   <include file="$(find pntddf_ros)/launch/agent.launch"> 
     <arg name="agent_name" value="T"/>
+    <arg name="config_file" value="$(arg config_file)"/>
+    <arg name="is_rover" value="True"/>
   </include>
+
+  <!-- <node name="T_move" pkg="pntddf_ros" type="waypoint_move.py" output="screen" ns="agent_T"/> -->
 </launch>
