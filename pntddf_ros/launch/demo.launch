@@ -1,5 +1,5 @@
 <launch>
-  <arg name="config_file" default="/opt/pnt_ddf_ws/config/sim2.config"/>
+  <arg name="config_file" default="$(find pntddf_ros)/config/sim_2_jackals.config"/>
 
   <!-- Gazebo -->
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
@@ -34,6 +34,17 @@
     <arg name="y"             value="0"/>
   </include>
 
+  <include file="$(find multi_jackal_base)/launch/jackal_base.launch">
+    <arg name="ns"            value="$(arg nsU)"/>
+    <arg name="config"        value="$(arg configU)"/>
+    <arg name="config_id"     value="$(arg configU_id)"/>
+    <arg name="use_move_base" value="true"/>
+    <arg name="use_global_ekf" default="false"/>
+    <arg name="use_global_tf"  default="true"/>
+    <arg name="x"             value="2"/>
+    <arg name="y"             value="0"/>
+  </include>
+
   <node pkg="tf" type="static_transform_publisher" name="world_transform"
         args="0 0 0 0 0 0 world map 100"/>
 
@@ -55,6 +66,12 @@
 
   <include file="$(find pntddf_ros)/launch/agent.launch"> 
     <arg name="agent_name" value="T"/>
+    <arg name="config_file" value="$(arg config_file)"/>
+    <arg name="is_rover" value="True"/>
+  </include>
+
+  <include file="$(find pntddf_ros)/launch/agent.launch"> 
+    <arg name="agent_name" value="U"/>
     <arg name="config_file" value="$(arg config_file)"/>
     <arg name="is_rover" value="True"/>
   </include>

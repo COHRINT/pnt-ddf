@@ -232,7 +232,7 @@ class Rover:
 
         goal = MoveBaseGoal()
 
-        goal.target_pose.header.frame_id = "{}/odom".format(self.model.model_name)
+        goal.target_pose.header.frame_id = "map"#"{}/odom".format(self.model.model_name)
         goal.target_pose.header.stamp = rospy.Time.now()
 
         goal.target_pose.pose.position.x = waypoint[0]
