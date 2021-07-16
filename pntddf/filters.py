@@ -32,7 +32,8 @@ class LSQ_Filter:
 
         self.completed = False
 
-        self.broadcast_time = self.env.NUM_AGENTS * self.env.TRANSMISSION_WINDOW * 2
+        self.broadcast_time = self.env.NUM_AGENTS * self.env.TRANSMISSION_WINDOW * 1
+        self.giveup_time = 60
 
     def estimate(self, measurement):
         self.add_measurement(measurement)
@@ -44,6 +45,11 @@ class LSQ_Filter:
             return True
         elif self.completed:
             return False
+        elif self.agent.clock.time() > self.giveup_time:
+            self.x = np.array(self.env.x0)
+            self.P = self.env.P0
+            self.completed = True
+            return True
 
         duplex_pairs = set(self.env.PAIRS_DUPLEX)
         measurement_pairs = set(
@@ -57,7 +63,6 @@ class LSQ_Filter:
         all_measurement_pairs = len(duplex_pairs - measurement_pairs) == 0
 
         if all_measurement_pairs and self.agent.clock.time() > self.broadcast_time:
-            x0 = self.env.x0.copy()
             lower_bounds = np.array(
                 [
                     -1e-6 if re.match(r"[xyz]_dot", str(state)) else -np.inf
@@ -71,18 +76,43 @@ class LSQ_Filter:
                 ]
             )
             bounds = (lower_bounds, upper_bounds)
-            lsq_result = least_squares(self.lsq_func, x0, bounds=bounds)
 
-            if lsq_result.success:
-                self.completed = True
-                x = lsq_result.x
-                H = lsq_result.jac
+            finished = False
+            while not finished:
+                x0 = np.random.multivariate_normal(self.env.x0, self.env.P0)
+                x0 = np.array(
+                    [
+                        max(l, min(u, x))
+                        for l, u, x in zip(lower_bounds, upper_bounds, x0)
+                    ]
+                )
+                lsq_result = least_squares(self.lsq_func, x0, bounds=bounds)
+
+                y = self.lsq_func(lsq_result.x)
+                J = (y ** 2).sum()
                 R = np.diag([meas.sigma_adjusted for meas in measurements])
-                P = inv(H.T @ inv(R) @ H)
-                time_delta = self.env.TRANSMISSION_WINDOW * self.env.NUM_AGENTS
-                Q = self.agent.estimator.filt.generate_Q(time_delta, np.array([0]))
-                self.x = x
-                self.P = P + Q
+
+                fudge_factor = 10
+
+                if J > (y @ inv(R) @ y) * fudge_factor:
+                    continue
+                else:
+                    finished = True
+
+                if lsq_result.success:
+                    self.completed = True
+                    x = lsq_result.x
+                    H = lsq_result.jac
+                    R = np.diag([meas.sigma_adjusted for meas in measurements])
+                    P = inv(H.T @ inv(R) @ H)
+                    time_delta = self.env.TRANSMISSION_WINDOW * self.env.NUM_AGENTS
+                    Q = self.agent.estimator.filt.generate_Q(time_delta, np.array([0]))
+                    self.x = x
+                    self.P = P + Q
+
+                    # not necessary, but speeds up the process if one agent shares a decent initial estimate
+                    if not self.agent.name == "Z":
+                        self.agent.radio.transmit_estimate(x, P + Q)
 
     def lsq_func(self, x):
         measurements = self.measurements
@@ -97,8 +127,14 @@ class LSQ_Filter:
             r = measurement.z - measurement.predict(x_back_prediction)
 
             if "rho" in measurement.name:
-                sigma_process_T = measurement.transmitter.clock.sigma_clock_process
-                sigma_process_R = measurement.receiver.clock.sigma_clock_process
+                T_name = measurement.transmitter.name
+                sigma_process_T = self.env.agent_configs[T_name].getfloat(
+                    "sigma_clock_process"
+                )
+                R_name = measurement.receiver.name
+                sigma_process_R = self.env.agent_configs[R_name].getfloat(
+                    "sigma_clock_process"
+                )
 
                 sigma_s_T = abs(
                     1 / 3 * sigma_process_T ** 2 * tau ** 3 * self.env.c ** 2
@@ -131,6 +167,12 @@ class LSQ_Filter:
         return tau
 
     def add_measurement(self, measurement):
+        measurement_names = [meas.name for meas in self.measurements]
+        if measurement.name in measurement_names:
+            # only have most recent measurement of each type
+            meas_index = measurement_names.index(measurement.name)
+            del self.measurements[meas_index]
+
         self.measurements.append(copy(measurement))
 
     def add_local_measurement(self, measurement):

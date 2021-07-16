@@ -32,6 +32,28 @@
     <arg name="y"             value="0"/>
   </include>
 
+  <!-- <include file="$(find multi_jackal_base)/launch/jackal_base.launch"> -->
+  <!--   <arg name="ns"            value="$(arg nsU)"/> -->
+  <!--   <arg name="config"        value="$(arg configU)"/> -->
+  <!--   <arg name="config_id"     value="$(arg configU_id)"/> -->
+  <!--   <arg name="use_move_base" value="true"/> -->
+  <!--   <arg name="use_global_ekf" default="false"/> -->
+  <!--   <arg name="use_global_tf"  default="true"/> -->
+  <!--   <arg name="x"             value="100"/> -->
+  <!--   <arg name="y"             value="0"/> -->
+  <!-- </include> -->
+
+  <!-- <include file="$(find multi_jackal_base)/launch/jackal_base.launch"> -->
+  <!--   <arg name="ns"            value="$(arg nsV)"/> -->
+  <!--   <arg name="config"        value="$(arg configV)"/> -->
+  <!--   <arg name="config_id"     value="$(arg configV_id)"/> -->
+  <!--   <arg name="use_move_base" value="true"/> -->
+  <!--   <arg name="use_global_ekf" default="false"/> -->
+  <!--   <arg name="use_global_tf"  default="true"/> -->
+  <!--   <arg name="x"             value="0"/> -->
+  <!--   <arg name="y"             value="100"/> -->
+  <!-- </include> -->
+
   <node pkg="tf" type="static_transform_publisher" name="world_transform"
         args="0 0 0 0 0 0 world map 100"/>
 
@@ -50,4 +72,12 @@
   <include file="$(find pntddf_ros)/launch/agent.launch"> 
     <arg name="agent_name" value="T"/>
   </include>
+
+  <!-- <include file="$(find pntddf_ros)/launch/agent.launch">  -->
+  <!--   <arg name="agent_name" value="U"/> -->
+  <!-- </include> -->
+
+  <!-- <include file="$(find pntddf_ros)/launch/agent.launch">  -->
+  <!--   <arg name="agent_name" value="V"/> -->
+  <!-- </include> -->
 </launch>

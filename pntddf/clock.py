@@ -10,7 +10,7 @@ class Clock:
         self.env = env
         self.agent = agent
 
-        self.time_previous = 0
+        self.time_previous = None
 
         self.define_parameters()
         self.define_noise()
@@ -48,7 +48,13 @@ class Clock:
 
     def update_time(self):
         # T is time delta since last clock check
+        if not self.time_previous:
+            self.time_previous = self.env.now
+
         T = self.env.now - self.time_previous
+        if T == 0:
+            return
+
         self.time_previous = self.env.now
 
         w = np.random.multivariate_normal(0 * self.q, self.Q(T))

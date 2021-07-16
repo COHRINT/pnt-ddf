@@ -31,13 +31,11 @@ class Estimator:
 
         self.run_filter(measurement)
 
-    def run_filter(self, measurement):
-        if self.env.ros:
-            import rospy
+    def new_estimate(self, x, P):
+        self.filt.define_initial_state(x=x, P=P)
+        self.lsq_init_completed = True
 
-            rospy.loginfo(
-                "{} has measurement {}".format(self.agent.name, measurement.name)
-            )
+    def run_filter(self, measurement):
         self.set_time_from_measurement(measurement)
 
         if self.env.lsq_init and not self.lsq_init_completed:
@@ -87,7 +85,7 @@ class Estimator:
         return x, P
 
     def get_event_triggering_measurements(self):
-        if not self.lsq_init_completed:
+        if not self.lsq_init_completed and self.env.lsq_init:
             measurements = self.lsq_filter.get_local_measurements_for_retransmission()
         else:
             measurements = self.filt.get_event_triggering_measurements()

@@ -6,7 +6,8 @@ from bpdb import set_trace
 from scipy.constants import c
 from scipy.spatial.distance import euclidean as distance
 
-from pntddf.measurements import Pseudorange
+from pntddf.measurements import (Asset_Detection, GPS_Measurement, Measurement,
+                                 Pseudorange)
 
 
 class Radio:
@@ -89,6 +90,20 @@ class Radio:
 
             self.cycle_number_previous = cycle_number
 
+    def transmit_estimate(self, x, P):
+        self.message = Message()
+
+        self.message.transmitter = self.agent
+
+        timestamp_transmit = self.agent.clock.time()
+        self.message.timestamp_transmit = timestamp_transmit
+
+        self.message.has_estimate = True
+        self.message.x = x
+        self.message.P = P
+
+        self.transmit_message()
+
     def prepare_message(self):
         self.message = Message()
 
@@ -125,6 +140,10 @@ class Radio:
     def receive(self, message):
         self.beacon_process.interrupt()
 
+        if message.has_estimate:
+            self.agent.estimator.new_estimate(message.x, message.P)
+            return
+
         timestamp_receive = self.agent.clock.time()
         message.timestamp_receive = timestamp_receive
 
@@ -145,7 +164,6 @@ class Radio:
 
         for measurement in message.measurements:
             measurement = copy(measurement)
-            measurement.time_receive = timestamp_receive
             self.agent.estimator.new_measurement(measurement)
 
     def receive_ros(self, transmission):
@@ -157,8 +175,9 @@ class Radio:
         )
         propagation_time = dist / self.env.c
 
-        rospy.sleep(propagation_time)
-        timestamp_receive = self.agent.clock.time()
+        receiver_clock_noise = np.random.normal(0, self.agent.clock.sigma_clock_reading)
+        timestamp_transmit = transmission.timestamp_transmit
+        timestamp_receive = timestamp_transmit + propagation_time + receiver_clock_noise
         transmission.timestamp_receive = timestamp_receive
 
         # create pseudorange measurement
@@ -171,18 +190,45 @@ class Radio:
         )
 
         # Pass the measurements to estimator
-        # self.agent.estimator.new_measurement(pseudorange)
+        self.agent.estimator.new_measurement(pseudorange)
 
-        # for measurement in transmission.measurements:
-        # measurement = copy(measurement)
-        # measurement.time_receive = timestamp_receive
-        # self.agent.estimator.new_measurement(measurement)
+        for meas_ros in transmission.measurements:
+            if "rho" in meas_ros.name:
+                R = self.env.agent_dict[meas_ros.name[-2]]
+                T = self.env.agent_dict[meas_ros.name[-1]]
+                measurement = Pseudorange(self.env, T, R, 0, 0)
+                measurement.z = meas_ros.z
+            elif "gps" in meas_ros.name:
+                # env, z, axis, agent, timestamp_receive):
+                z = meas_ros.z
+                dim_name = meas_ros.name[-3]
+                agent_name = meas_ros.name[-1]
+                axis = self.env.dim_names.index(dim_name)
+                agent = self.env.agent_dict[agent_name]
+                # this time isn't correct for the GPS
+                # could transmit time with ROS message at some point
+                t = timestamp_receive
+                measurement = GPS_Measurement(self.env, z, axis, agent, t)
+            elif "detection" in meas_ros.name:
+                # self.name = "detection_{}_{}".format(
+                #     self.env.dim_names[self.axis], self.agent.name
+                # )
+                z = meas_ros.z
+                var = meas_ros.sigma ** 2
+                dim_name = meas_ros.name[-3]
+                agent_name = meas_ros.name[-1]
+                axis = self.env.dim_names.index(dim_name)
+                agent = self.env.agent_dict[agent_name]
+                # this time isn't correct for the Asset Detection
+                # could transmit time with ROS message at some point
+                t = timestamp_receive
+                measurement = Asset_Detection(self.env, z, var, axis, agent, t)
 
-        # rospy.loginfo(
-        # "{} received from {}: {:.2f} m".format(
-        # self.agent.name, transmission.transmitter, pseudorange.z
-        # )
-        # )
+            measurement.local = False
+            measurement.implicit = meas_ros.implicit
+            measurement.explicit = not meas_ros.implicit
+
+            self.agent.estimator.new_measurement(measurement)
 
 
 class Transmission:
@@ -218,7 +264,9 @@ class Message:
         self.transmitter = None
         self.receiver = None
 
-        self.measurements = None
+        self.has_estimate = False
+
+        self.measurements = []
 
     def __copy__(self):
         new = type(self)()

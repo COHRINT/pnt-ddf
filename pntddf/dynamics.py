@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 import numpy as np
 from bpdb import set_trace
 from numpy import cos, pi, sign, sin, sqrt, square, sum
@@ -36,6 +38,14 @@ class Rover:
         )
         self.model = GetModelStateRequest()
         self.model.model_name = "jackal_{}".format(self.agent.name)
+
+        self.x_previous = 0
+        self.y_previous = 0
+        self.z_previous = 0
+
+        self.v_x_previous = 0
+        self.v_y_previous = 0
+        self.v_z_previous = 0
 
     def setup_x(self):
         if self.agent_config.getboolean("random_initial_state"):
@@ -115,20 +125,23 @@ class Rover:
         self.G_fxn = lambdify(Delta_t, self.G)
 
     def u(self, t):
-        initial_wait = 5.0
+        if not self.env.ros:
+            initial_wait = 5.0
 
-        if t < initial_wait:
-            return np.zeros(self.env.n_dim)
+            if t < initial_wait:
+                return np.zeros(self.env.n_dim)
 
-        R = 0.01
-        omega = 2 * np.pi / 1000
+            R = 0.01
+            omega = 2 * np.pi / 1000
 
-        u = np.array(
-            [
-                self.u_x_mult * R * np.sin(omega * t),
-                self.u_y_mult * R * np.cos(omega * t),
-            ]
-        )[: self.env.n_dim]
+            u = np.array(
+                [
+                    self.u_x_mult * R * np.sin(omega * t),
+                    self.u_y_mult * R * np.cos(omega * t),
+                ]
+            )[: self.env.n_dim]
+        else:
+            u = np.zeros(self.env.n_dim)
 
         return u
 
@@ -160,10 +173,20 @@ class Rover:
 
             return self.x[: self.env.n_dim].copy()
         else:
-            result = self.get_model_srv(self.model)
-            x = result.pose.position.x
-            y = result.pose.position.y
-            z = result.pose.position.z
+            try:
+                result = self.get_model_srv(self.model)
+                x = result.pose.position.x
+                y = result.pose.position.y
+                z = result.pose.position.z
+
+                self.x_previous = x
+                self.y_previous = y
+                self.z_previous = z
+
+            except:
+                x = self.x_previous
+                y = self.y_previous
+                z = self.z_previous
 
             return np.array([x, y, z])[: self.env.n_dim]
 
@@ -176,10 +199,21 @@ class Rover:
 
             return self.x[self.env.n_dim :].copy()
         else:
-            result = self.get_model_srv(self.model)
-            v_x = result.twist.linear.x
-            v_y = result.twist.linear.y
-            v_z = result.twist.linear.z
+            try:
+                result = self.get_model_srv(self.model)
+
+                v_x = result.twist.linear.x
+                v_y = result.twist.linear.y
+                v_z = result.twist.linear.z
+
+                self.v_x_previous = v_x
+                self.v_y_previous = v_y
+                self.v_z_previous = v_z
+
+            except:
+                v_x = self.v_x_previous
+                v_y = self.v_y_previous
+                v_z = self.v_z_previous
 
             return np.array([v_x, v_y, v_z])[: self.env.n_dim]
 
@@ -400,9 +434,12 @@ class Dynamics:
             G[-self.env.NUM_ROVER_STATES :, :] = G_rover
 
         Delta_t = symbols("Delta_t", real=True, positive=True)
-        self.F = lambdify(Delta_t, F)
-        self.G = lambdify(Delta_t, G)
+        # self.F = lambdify(Delta_t, F)
+        # self.G = lambdify(Delta_t, G)
+        self.F = lru_cache(maxsize=2000)(lambdify(Delta_t, F))
+        self.G = lru_cache(maxsize=2000)(lambdify(Delta_t, G))
 
+    @lru_cache(maxsize=2000)
     def u(self, t):
         if self.env.ROVER_NAMES:
             u = np.concatenate(
@@ -440,6 +477,8 @@ class Dynamics:
             return np.array(self.evaluate_f_true_time(*x, *taus, t))
 
     def step_x(self, x, tau, t_estimate):
+        tau = round(tau, 4)
+        t_estimate = round(t_estimate, 4)
         x_prediction = self.F(tau) @ x + self.G(tau) @ self.u(t_estimate)
         return x_prediction
 

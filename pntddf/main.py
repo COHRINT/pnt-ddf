@@ -9,8 +9,8 @@ from pntddf.results import (comm_savings, plot_b, plot_b_dot, plot_residuals,
                             plot_rover_state_errors, plot_test, plot_time,
                             plot_trajectory)
 
-# config_file = "../config/sim.config"
-config_file = "../config/1d.config"
+config_file = "../config/sim.config"
+# config_file = "../config/1d.config"
 # config_file = "../config/demo.config"
 
 env = setup_env(config_file)
@@ -47,5 +47,5 @@ with progressbar.ProgressBar(max_value=len(agents_to_plot) * len(plots)) as bar:
             counter += 1
             bar.update(counter)
 
-comm_savings(env, env.agents)
+# comm_savings(env, env.agents)
 plot_test(env, env.agents[0])

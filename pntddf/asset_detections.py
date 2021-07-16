@@ -24,9 +24,6 @@ class Asset_Detections_Receiver:
         )
 
     def detected_asset_callback(self, msg):
-        rospy.loginfo(
-            "{} received {}".format(self.agent.name, msg.assetPositions[0].id)
-        )
         for detection in msg.assetPositions:
             try:
                 agent_name = detection.id.split("_")[1]

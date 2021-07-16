@@ -27,10 +27,8 @@ class Agent:
         self.estimator = Estimator(self.env, self)
 
         # Asset Detections
-        if self.env.ros:
-            import rospy
-
-            rospy.loginfo("ADR {}".format(self.name))
+        # only agent A gets asset detections to avoid double-counting
+        if self.env.ros and self.name == "A":
             self.asset_detections_receiver = Asset_Detections_Receiver(self.env, self)
 
         # Radio

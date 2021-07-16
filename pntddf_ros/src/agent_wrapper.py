@@ -19,14 +19,21 @@ class Agent_Wrapper:
         env = setup_env(config_file, ros=True)
 
         self.agent = env.agent_dict[self.agent_name]
+
+        # register shutdown handle
+        rospy.on_shutdown(self.shutdown)
+
         self.agent.init()
 
-        rate = rospy.Rate(1)
+    def shutdown(self):
+        try:
+            df_state = self.agent.estimator.get_state_log_df()
+            df_state.to_pickle("/opt/rosbags/df_state_{}.pkl".format(self.agent_name))
+        except:
+            pass
 
-        while not rospy.is_shutdown():
-            rospy.loginfo("success {}".format(self.agent_name))
-
-            rate.sleep()
+        df_meas = self.agent.estimator.get_residuals_log_df()
+        df_meas.to_pickle("/opt/rosbags/df_meas_{}.pkl".format(self.agent_name))
 
 
 if __name__ == "__main__":

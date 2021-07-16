@@ -89,6 +89,9 @@ RUN echo "source /opt/ros/melodic/setup.bash" >> ~/.bashrc
 RUN echo "source /ros_entrypoint.sh" >> ~/.bashrc
 RUN echo "source /opt/ros_ws/devel/setup.bash" >> ~/.bashrc
 
+# launch script
+RUN echo 'alias launch="roslaunch pntddf_ros demo.launch"' >> ~/.bashrc
+
 WORKDIR $ROS_WS
 
 CMD ["/bin/bash"]

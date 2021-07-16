@@ -148,6 +148,9 @@ def plot_rover_state_errors(env, agent, df, _):
     if df.filter(regex="[xy]_").empty:
         return
 
+    if env.centralized:
+        df_Z = env.agent_centralized.estimator.get_state_log_df()
+
     fig, axes = plt.subplots(
         env.n_dim * 2,
         len(env.ROVER_NAMES),
@@ -167,7 +170,9 @@ def plot_rover_state_errors(env, agent, df, _):
         state_names_latex += ["\dot{{{}}}_{}".format(v, rover) for v in env.dim_names]
 
         init_time = env.NUM_AGENTS * env.TRANSMISSION_WINDOW * 3
-        rmse = RMSE(df[df.t > init_time].filter(regex="[xyz]_{}_error".format(rover)))
+        rmse = RMSE_value(
+            df[df.t > init_time].filter(regex="[xyz]_{}_error".format(rover))
+        )
         axes[0, i].set(title="Position RMSE: {:.2f} [ m ]".format(rmse))
 
         for s, state in enumerate(env.ROVER_STATES):
@@ -191,6 +196,15 @@ def plot_rover_state_errors(env, agent, df, _):
                 alpha=0.4,
                 label="{:.2f}$\in \pm 2\sigma$".format(in_bounds),
             )
+            if env.centralized:
+                axes[s, i].fill_between(
+                    df_Z.t,
+                    +2 * df_Z[state + "_{}_sigma".format(rover)],
+                    -2 * df_Z[state + "_{}_sigma".format(rover)],
+                    color="C1",
+                    alpha=0.4,
+                    label="cent. $\pm 2 \sigma$",
+                )
             axes[s, i].legend(framealpha=1.0)
             state_latex = state_names_latex[s]
             axes[s, i].set(
@@ -209,8 +223,12 @@ def plot_rover_state_errors(env, agent, df, _):
     plt.close()
 
 
-def RMSE(df):
-    return np.sqrt((df ** 2).sum(axis=1).mean())
+def RMSE_value(df):
+    return np.sqrt((df ** 2).mean().mean())
+
+
+def RMSE_vector(df):
+    return np.sqrt((df ** 2).mean(axis=1))
 
 
 def plot_trajectory(env, agent, df, _, show_beacons=False):
@@ -411,3 +429,23 @@ def comm_savings(env, agents):
 
         savings_kb = int(I * 4 / 1000)
         print("{} & {} & {} & {} & {} \\\\".format(agent.name, L, I, E, savings_kb))
+
+
+def plot_RMSE_values(
+    dfs, variable_values, variable_latex_name, variable_units, file_name
+):
+    fig, ax = plt.subplots()
+
+    for df, var_value in zip(dfs, variable_values):
+        ax.plot(
+            df.t,
+            df.position_rmse,
+            label="{} = {} [ {} ]".format(
+                variable_latex_name, var_value, variable_units
+            ),
+        )
+
+    ax.legend()
+    ax.set(xlabel="$t$ [ s ]", ylabel="Position RMSE [ m ]")
+    plt.savefig(file_name)
+    plt.show()

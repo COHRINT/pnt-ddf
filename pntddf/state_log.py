@@ -47,10 +47,14 @@ class State_Log:
         # Clock states
         b_values = [
             self.env.agent_dict[agent].clock.b
+            if hasattr(self.env.agent_dict[agent], "clock")
+            else np.nan
             for agent in self.env.agent_clocks_to_be_estimated
         ]
         b_dot_values = [
             self.env.agent_dict[agent].clock.b_dot
+            if hasattr(self.env.agent_dict[agent], "clock")
+            else np.nan
             for agent in self.env.agent_clocks_to_be_estimated
         ]
 
@@ -96,28 +100,44 @@ class State_Log:
         # self.log_epsilon_z.append(epsilon_z)
 
     def get_state_log_df(self):
-        data = np.hstack(
-            [np.array(self.log_t)[np.newaxis].T]
-            + [np.array(self.log_t_estimate)[np.newaxis].T]
-            + [np.stack(self.log_x)]
-            + [np.stack(self.log_x) - np.stack(self.log_x_true)]
-            + [np.stack(self.log_x_true)]
-            + [
-                np.sqrt(np.dstack(self.log_P)[i, i, :])[np.newaxis].T
-                for i in range(self.env.NUM_STATES)
-            ]
-            + [np.stack(self._log_u)]
-        )
-
-        state_names = self.env.STATE_NAMES
-        control_names = list(
-            chain.from_iterable(
-                [
-                    ["u_{}_{}".format(v, rover_name) for v in self.env.dim_names]
-                    for rover_name in self.env.ROVER_NAMES
+        if not self.env.ros:
+            data = np.hstack(
+                [np.array(self.log_t)[np.newaxis].T]
+                + [np.array(self.log_t_estimate)[np.newaxis].T]
+                + [np.stack(self.log_x)]
+                + [np.stack(self.log_x) - np.stack(self.log_x_true)]
+                + [np.stack(self.log_x_true)]
+                + [
+                    np.sqrt(np.dstack(self.log_P)[i, i, :])[np.newaxis].T
+                    for i in range(self.env.NUM_STATES)
+                ]
+                + [np.stack(self._log_u)]
+            )
+        else:
+            data = np.hstack(
+                [np.array(self.log_t)[np.newaxis].T]
+                + [np.array(self.log_t_estimate)[np.newaxis].T]
+                + [np.stack(self.log_x)]
+                + [np.stack(self.log_x) - np.stack(self.log_x_true)]
+                + [np.stack(self.log_x_true)]
+                + [
+                    np.sqrt(np.dstack(self.log_P)[i, i, :])[np.newaxis].T
+                    for i in range(self.env.NUM_STATES)
                 ]
             )
-        )
+
+        state_names = self.env.STATE_NAMES
+        if not self.env.ros:
+            control_names = list(
+                chain.from_iterable(
+                    [
+                        ["u_{}_{}".format(v, rover_name) for v in self.env.dim_names]
+                        for rover_name in self.env.ROVER_NAMES
+                    ]
+                )
+            )
+        else:
+            control_names = []
 
         columns = (
             ["t", "t_estimate"]

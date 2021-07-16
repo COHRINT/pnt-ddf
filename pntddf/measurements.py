@@ -61,6 +61,7 @@ class Measurement:
         measurement = Measurement_ROS()
         measurement.z = self.z
         measurement.sigma = self.sigma
+        measurement.name = self.name
         measurement.implicit = self.implicit
 
         return measurement

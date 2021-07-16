@@ -166,7 +166,11 @@ def setup_env(config_file, ros=False):
     env.agent_dict = {name: agent for name, agent in zip(env.AGENT_NAMES, env.agents)}
 
     # Centralized
-    env.centralized = config.getboolean("ENV", "centralized")
+    # centralized filter not modified to work with ROS implementation yet
+    if not env.ros:
+        env.centralized = config.getboolean("ENV", "centralized")
+    else:
+        env.centralized = False
     env.config_centralized = config["Z"]
     env.agent_centralized = Agent_Centralized(env, "Z")
 
